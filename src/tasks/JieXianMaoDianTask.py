@@ -12,6 +12,7 @@ class JieXianMaoDianTask(BaseQRSLTask):
     同时每隔2秒检测新消息区域并自动点击。
     点击确认后播放声音提示。
     支持设置排除文字，当检测到的文本包含排除词时忽略。
+    新增：完全匹配开关，可控制是否要求文字与关键词完全一致。
     """
 
     def __init__(self, *args, **kwargs):
@@ -23,18 +24,21 @@ class JieXianMaoDianTask(BaseQRSLTask):
         # 默认配置
         self.default_config.update({
             '模式选择': '半自动',
-            '检测文字': '时装,外显,饰品,2饰,3饰,3X饰品,3X时装,3X小垃圾,3x载具,30,三饰,三星时装,20,2时,3时',
-            '排除文字': '吃,我,蹲,有,300,200,100,还,打,爆率,上,能,行,点,来,测,的,期,给,没,拉,不,呢',
+            '完全匹配': True,  # 新增：默认开启完全匹配
+            '检测文字': '2饰,3饰,2X饰品,3X饰品,2X时装,3X时装,2X小垃圾,3X小垃圾,2X载具,3X载具,二饰,三饰,二星时装,三星时装,20,30,二十,三十',
+            '排除文字': '吃,我,蹲,有,300,200,还,打,爆率,上,能,行,点,来,测,的,期,给,没,拉,不,呢',
             '申请入队延迟(ms)': 500,  # 点击玩家头像后等待时间
         })
 
         self.config_description = {
+            '完全匹配': '开启时，要求检测到的文字与关键词完全一致；关闭时，文字包含关键词即触发',
             '模式选择': '选择任务模式',
             '申请入队延迟(ms)': '点击玩家头像后等待时间（毫秒）',
+
             # 检测文字和排除文字的描述在基类中已自动处理，无需重复
         }
 
-        # 显式定义下拉框类型
+        # 显式定义下拉框和复选框类型
         self.config_type = {
             '模式选择': {'type': 'drop_down', 'options': ['半自动']},
         }
@@ -67,7 +71,9 @@ class JieXianMaoDianTask(BaseQRSLTask):
             exclude_words = [w.strip() for w in exclude_raw.split(',') if w.strip()] if exclude_raw else []
 
             mode = self.config.get('模式选择', '半自动')
+            exact_match = self.config.get('完全匹配', True)  # 读取完全匹配开关
             self.log_info(f"当前模式: {mode}")
+            self.log_info(f"完全匹配模式: {'开启' if exact_match else '关闭'}")
 
             # 读取申请入队延迟
             delay_apply = self.config.get('申请入队延迟(ms)', 500) / 1000.0
@@ -132,7 +138,7 @@ class JieXianMaoDianTask(BaseQRSLTask):
                     except Exception as e:
                         self.log_error(f"新消息检测异常: {e}")
 
-                # 3.2 主文字检测（带排除逻辑）
+                # 3.2 主文字检测（带排除逻辑和完全匹配判断）
                 ocr_results = self.ocr(box=detect_box, target_height=540)
                 if ocr_results:
                     for box in ocr_results:
@@ -141,11 +147,21 @@ class JieXianMaoDianTask(BaseQRSLTask):
                         if exclude_words and any(ex in text for ex in exclude_words):
                             self.log_debug(f"忽略包含排除词的文本: {text}")
                             continue
+
                         for kw in keywords:
-                            if kw in text:
-                                matched_text = kw
-                                self.log_info(f"✅ 检测到目标文字: {text} (关键词: {kw})")
-                                break
+                            if exact_match:
+                                # 完全匹配：文本必须与关键词完全相同（忽略首尾空格）
+                                if text.strip() == kw.strip():
+                                    matched_text = kw
+                                    self.log_info(f"✅ 检测到目标文字（完全匹配）: {text} (关键词: {kw})")
+                                    break
+                            else:
+                                # 包含匹配：关键词是文本的子串
+                                if kw in text:
+                                    matched_text = kw
+                                    self.log_info(f"✅ 检测到目标文字（包含匹配）: {text} (关键词: {kw})")
+                                    break
+
                         if matched_text:
                             break
                 if matched_text:
