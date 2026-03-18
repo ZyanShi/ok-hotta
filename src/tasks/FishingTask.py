@@ -114,7 +114,7 @@ class FishingTask(BaseQRSLTask):
         self.log_info("抛竿完成，等待鱼上钩...")
         start_time = time.time()
         target_box = self._get_scaled_box(*self.FISH_TARGET_REF)
-        while time.time() - start_time < 30:
+        while time.time() - start_time < 10:
             if self._get_color_percentage(target_box, self.COLOR_TARGET, self.COLOR_TOLERANCE) > 0:
                 self.log_info("鱼上钩了，开始遛鱼")
                 return True
