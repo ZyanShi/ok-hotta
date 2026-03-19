@@ -127,7 +127,6 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         pixel = frame[y, x]
         return self._color_similar(pixel, self.TARGET_COLOR_BGR, tolerance=30)
 
-    # 新方法：仅监测BOSS刷新（不检测宝箱）
     def _monitor_boss_spawn_only(self, timeout):
         """仅监测首领刷新提示，不识别宝箱。返回 'boss_found' 或 'timeout'"""
         self.log_info(f"进入BOSS刷新监测阶段，超时{timeout}秒")
@@ -212,6 +211,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             self.sleep(0.5)
         return None
 
+    # ==================== 修改后的十字搜索 ====================
     def _cross_search(self):
         self.log_info("启动十字搜索，宝箱阈值0.6")
         found_event = threading.Event()
@@ -219,54 +219,67 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         chest_box = [None]
 
         def searcher():
-            while not stop_event.is_set() and not found_event.is_set():
-                try:
-                    frame = self.frame
-                    if frame is not None:
-                        h, w = frame.shape[:2]
-                        full_box = Box(0, 0, w, h)
-                        for name in self.CHEST_NAMES:
-                            results = self.find_feature(name, box=full_box, threshold=0.6)
-                            if results:
-                                chest_box[0] = results[0]
-                                self.log_info(f"十字搜索找到宝箱: {name}")
-                                found_event.set()
+            try:
+                while not stop_event.is_set() and not found_event.is_set():
+                    try:
+                        frame = self.frame
+                        if frame is not None:
+                            h, w = frame.shape[:2]
+                            full_box = Box(0, 0, w, h)
+                            for name in self.CHEST_NAMES:
+                                results = self.find_feature(name, box=full_box, threshold=0.6)
+                                if results:
+                                    chest_box[0] = results[0]
+                                    self.log_info(f"十字搜索找到宝箱: {name}")
+                                    found_event.set()
+                                    break
+                        # 每次循环后 sleep 一小段时间，sleep 会检查任务是否被停止
+                        for _ in range(3):
+                            if stop_event.is_set():
                                 break
-                    for _ in range(3):
-                        if stop_event.is_set():
-                            break
-                        self.sleep(0.033)
-                except TaskDisabledException:
-                    self.log_debug("十字搜索被用户停止")
-                    stop_event.set()
-                    break
+                            self.sleep(0.033)   # 可能抛出 TaskDisabledException
+                    except TaskDisabledException:
+                        # 任务被停止，设置停止事件并退出线程
+                        self.log_debug("十字搜索线程检测到任务停止")
+                        stop_event.set()
+                        break
+            except Exception as e:
+                self.log_error(f"十字搜索线程异常: {e}")
+                stop_event.set()
 
         def mover():
-            moves = [
-                ('w', 5.0, 0.5),
-                ('s', 10.0, 0.5),
-                ('w', 5.0, 0.5),
-                ('a', 5.0, 0.5),
-                ('d', 10.0, 0.5),
-            ]
-            for key, down_time, after_sleep in moves:
-                if stop_event.is_set() or found_event.is_set():
-                    break
-                self.log_debug(f"十字移动: 按{key} {down_time}秒")
-                try:
-                    self.send_key_down(key)
-                    press_start = time.time()
-                    while time.time() - press_start < down_time:
-                        if stop_event.is_set() or found_event.is_set():
-                            break
-                        self.sleep(0.05)
-                finally:
-                    self.send_key_up(key)
-                if after_sleep > 0:
-                    self._sleep_with_events(after_sleep, stop_event, found_event)
-            stop_event.set()
-            if not found_event.is_set():
-                self.log_debug("十字移动序列执行完毕，未找到宝箱")
+            try:
+                moves = [
+                    ('w', 5.0, 0.5),
+                    ('s', 10.0, 0.5),
+                    ('w', 5.0, 0.5),
+                    ('a', 5.0, 0.5),
+                    ('d', 10.0, 0.5),
+                ]
+                for key, down_time, after_sleep in moves:
+                    if stop_event.is_set() or found_event.is_set():
+                        break
+                    self.log_debug(f"十字移动: 按{key} {down_time}秒")
+                    try:
+                        self.send_key_down(key)
+                        press_start = time.time()
+                        while time.time() - press_start < down_time:
+                            if stop_event.is_set() or found_event.is_set():
+                                break
+                            self.sleep(0.05)   # 可能抛出 TaskDisabledException
+                    except TaskDisabledException:
+                        self.log_debug("十字移动线程检测到任务停止")
+                        stop_event.set()
+                        break
+                    finally:
+                        self.send_key_up(key)
+                    if after_sleep > 0:
+                        self._sleep_with_events(after_sleep, stop_event, found_event)
+            except Exception as e:
+                self.log_error(f"十字移动线程异常: {e}")
+                stop_event.set()
+            finally:
+                stop_event.set()   # 移动序列结束，通知搜索线程停止
 
         t1 = threading.Thread(target=searcher, daemon=True)
         t2 = threading.Thread(target=mover, daemon=True)
@@ -274,14 +287,23 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         t2.start()
 
         try:
-            t2.join()
-            t1.join()
+            # 主线程循环等待，定期检查停止信号
+            while t1.is_alive() or t2.is_alive():
+                self.sleep(0.1)   # 关键：这里会抛出 TaskDisabledException
+                if found_event.is_set():
+                    # 找到宝箱，提前停止移动线程
+                    stop_event.set()
         except TaskDisabledException:
             self.log_info("十字搜索被用户手动停止")
             stop_event.set()
+            # 等待线程结束，但不再阻塞响应
             t1.join(timeout=1)
             t2.join(timeout=1)
-            raise
+            raise   # 重新抛出异常，让上层捕获
+
+        # 确保线程完全结束
+        t1.join()
+        t2.join()
 
         if found_event.is_set():
             self.log_info("十字搜索成功找到宝箱")
@@ -289,104 +311,129 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.log_info("十字移动序列结束，未找到宝箱")
         return None
 
+    # ==================== 修改后的米字搜索 ====================
     def _mi_search(self):
-        self.log_info(f"启动米字搜索，宝箱阈值0.6，执行完整移动序列")
+        self.log_info("启动米字搜索，宝箱阈值0.6，执行完整移动序列")
         found_event = threading.Event()
         stop_event = threading.Event()
         chest_box = [None]
 
         def searcher():
-            while not stop_event.is_set() and not found_event.is_set():
-                try:
-                    frame = self.frame
-                    if frame is not None:
-                        h, w = frame.shape[:2]
-                        full_box = Box(0, 0, w, h)
-                        for name in self.CHEST_NAMES:
-                            results = self.find_feature(name, box=full_box, threshold=0.6)
-                            if results:
-                                chest_box[0] = results[0]
-                                self.log_info(f"米字搜索找到宝箱: {name}")
-                                found_event.set()
+            try:
+                while not stop_event.is_set() and not found_event.is_set():
+                    try:
+                        frame = self.frame
+                        if frame is not None:
+                            h, w = frame.shape[:2]
+                            full_box = Box(0, 0, w, h)
+                            for name in self.CHEST_NAMES:
+                                results = self.find_feature(name, box=full_box, threshold=0.6)
+                                if results:
+                                    chest_box[0] = results[0]
+                                    self.log_info(f"米字搜索找到宝箱: {name}")
+                                    found_event.set()
+                                    break
+                        for _ in range(3):
+                            if stop_event.is_set():
                                 break
-                    for _ in range(3):
-                        if stop_event.is_set():
-                            break
-                        self.sleep(0.033)
-                except TaskDisabledException:
-                    self.log_debug("米字搜索被用户停止")
-                    stop_event.set()
-                    break
+                            self.sleep(0.033)
+                    except TaskDisabledException:
+                        self.log_debug("米字搜索线程检测到任务停止")
+                        stop_event.set()
+                        break
+            except Exception as e:
+                self.log_error(f"米字搜索线程异常: {e}")
+                stop_event.set()
 
         def mover():
-            moves = [
-                ('w', 5.0, 0.5),
-                ('s', 10.0, 0.5),
-                ('w', 5.0, 0.5),
-                ('a', 5.0, 0.5),
-                ('d', 10.0, 0.5),
-                ('a', 5.0, 0.5),
-                ('a', 'w', 5.0, 0.5),
-                ('s', 'd', 10.0, 0.5),
-                ('a', 'w', 5.0, 0.5),
-                ('w', 'd', 5.0, 0.5),
-                ('a', 's', 10.0, 0.5),
-            ]
-            for move in moves:
-                if stop_event.is_set() or found_event.is_set():
-                    break
-                if len(move) == 3:
-                    key, down_time, after_sleep = move
-                    self.log_debug(f"米字移动: 按{key} {down_time}秒")
-                    try:
-                        self.send_key_down(key)
-                        press_start = time.time()
-                        while time.time() - press_start < down_time:
-                            if stop_event.is_set() or found_event.is_set():
-                                break
-                            self.sleep(0.05)
-                    finally:
-                        self.send_key_up(key)
-                    if after_sleep > 0:
-                        self._sleep_with_events(after_sleep, stop_event, found_event)
-                elif len(move) == 4:
-                    key1, key2, down_time, after_sleep = move
-                    self.log_debug(f"米字移动: 同时按{key1}+{key2} {down_time}秒")
-                    try:
-                        self.send_key_down(key1)
-                        self.send_key_down(key2)
-                        press_start = time.time()
-                        while time.time() - press_start < down_time:
-                            if stop_event.is_set() or found_event.is_set():
-                                break
-                            self.sleep(0.05)
-                    finally:
-                        self.send_key_up(key1)
-                        self.send_key_up(key2)
-                    if after_sleep > 0:
-                        self._sleep_with_events(after_sleep, stop_event, found_event)
-            stop_event.set()
-            if not found_event.is_set():
-                self.log_debug("米字移动序列执行完毕，未找到宝箱")
+            try:
+                moves = [
+                    ('w', 5.0, 0.5),
+                    ('s', 10.0, 0.5),
+                    ('w', 5.0, 0.5),
+                    ('a', 5.0, 0.5),
+                    ('d', 10.0, 0.5),
+                    ('a', 5.0, 0.5),
+                    ('a', 'w', 5.0, 0.5),
+                    ('s', 'd', 10.0, 0.5),
+                    ('a', 'w', 5.0, 0.5),
+                    ('w', 'd', 5.0, 0.5),
+                    ('a', 's', 10.0, 0.5),
+                ]
+                for move in moves:
+                    if stop_event.is_set() or found_event.is_set():
+                        break
+                    if len(move) == 3:
+                        key, down_time, after_sleep = move
+                        self.log_debug(f"米字移动: 按{key} {down_time}秒")
+                        try:
+                            self.send_key_down(key)
+                            press_start = time.time()
+                            while time.time() - press_start < down_time:
+                                if stop_event.is_set() or found_event.is_set():
+                                    break
+                                self.sleep(0.05)
+                        except TaskDisabledException:
+                            self.log_debug("米字移动线程检测到任务停止")
+                            stop_event.set()
+                            break
+                        finally:
+                            self.send_key_up(key)
+                        if after_sleep > 0:
+                            self._sleep_with_events(after_sleep, stop_event, found_event)
+                    elif len(move) == 4:
+                        key1, key2, down_time, after_sleep = move
+                        self.log_debug(f"米字移动: 同时按{key1}+{key2} {down_time}秒")
+                        try:
+                            self.send_key_down(key1)
+                            self.send_key_down(key2)
+                            press_start = time.time()
+                            while time.time() - press_start < down_time:
+                                if stop_event.is_set() or found_event.is_set():
+                                    break
+                                self.sleep(0.05)
+                        except TaskDisabledException:
+                            self.log_debug("米字移动线程检测到任务停止")
+                            stop_event.set()
+                            break
+                        finally:
+                            self.send_key_up(key1)
+                            self.send_key_up(key2)
+                        if after_sleep > 0:
+                            self._sleep_with_events(after_sleep, stop_event, found_event)
+            except Exception as e:
+                self.log_error(f"米字移动线程异常: {e}")
+                stop_event.set()
+            finally:
+                stop_event.set()
 
         t1 = threading.Thread(target=searcher, daemon=True)
         t2 = threading.Thread(target=mover, daemon=True)
         t1.start()
         t2.start()
+
         try:
-            t2.join()
-            t1.join()
+            while t1.is_alive() or t2.is_alive():
+                self.sleep(0.1)
+                if found_event.is_set():
+                    stop_event.set()
         except TaskDisabledException:
             self.log_info("米字搜索被用户手动停止")
             stop_event.set()
             t1.join(timeout=1)
             t2.join(timeout=1)
             raise
+
+        t1.join()
+        t2.join()
+
         if found_event.is_set():
             self.log_info("米字搜索成功找到宝箱")
             return chest_box[0]
         self.log_info("米字移动序列结束，未找到宝箱")
         return None
+
+    # ========================================================
 
     def cross_search(self):
         mode = self.config.get('搜索模式', '十字搜索')
