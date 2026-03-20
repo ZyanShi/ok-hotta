@@ -500,7 +500,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
 
         ocr_confirm_start = None
-        STABLE_TIME = 0.3
+        STABLE_TIME = 0.2
 
         try:
             while time.time() - start_time < max_walk_time:
