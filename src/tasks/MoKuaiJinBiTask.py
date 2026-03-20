@@ -499,18 +499,16 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         x2, y2 = self._get_scaled_coordinates(1280, 575)
         ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
 
-        ocr_confirm_start = None
-        STABLE_TIME = 0.2
-
         try:
             while time.time() - start_time < max_walk_time:
                 current_time = time.time()
 
+                # 执行 OCR 检测
                 target_detected = False
                 try:
                     ocr_results = self.ocr(box=ocr_box, target_height=540)
                     if ocr_results:
-                        texts = [box.name for box in ocr_results]
+                        texts = [box.name.strip() for box in ocr_results]
                         self.log_debug(f"OCR识别到: {texts}")
                         for box in ocr_results:
                             text = box.name.strip()
@@ -520,22 +518,17 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                 except Exception as e:
                     self.log_debug(f"OCR检测异常: {e}")
 
+                # 修改点：只要检测到目标文字就立即返回成功
                 if target_detected:
-                    if ocr_confirm_start is None:
-                        ocr_confirm_start = current_time
-                        self.log_debug("首次检测到目标文字，开始计时")
-                    elif current_time - ocr_confirm_start >= STABLE_TIME:
-                        self.log_info(f"目标文字稳定出现{STABLE_TIME}秒，接近成功")
-                        return True
-                else:
-                    if ocr_confirm_start is not None:
-                        self.log_debug("目标文字消失，重置计时")
-                        ocr_confirm_start = None
+                    self.log_info("检测到目标文字，接近成功")
+                    return True
 
+                # 控制按键频率
                 if current_time - last_key_press_time < key_press_interval:
                     self.sleep(0.05)
                     continue
 
+                # 获取当前画面，尝试用模板匹配锁定宝箱位置
                 frame = self.frame
                 if frame is None:
                     continue
