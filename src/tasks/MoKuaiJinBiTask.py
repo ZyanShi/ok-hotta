@@ -706,10 +706,10 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                 self.last_shenlin_time = time.time()
 
                 # ===== 新增：自动战斗后立即寻找宝箱5秒 =====
-                self.log_info("自动战斗已开启，立即寻找宝箱5秒...")
-                chest = self.wait_any_chest(time_out=5)
+                self.log_info("自动战斗已开启，立即寻找宝箱2秒...")
+                chest = self.wait_any_chest(time_out=2)
                 if chest:
-                    self.log_info("5秒内找到宝箱，关闭自动战斗并直接拾取")
+                    self.log_info("2秒内找到宝箱，关闭自动战斗并直接拾取")
                     # 再次点击自动战斗按钮关闭自动战斗
                     self.start_auto_combat()
                     self.sleep(1)
