@@ -183,7 +183,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return False
 
     def wait_any_chest(self, time_out=30):
-        self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.6")
+        self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.7")
         start = time.time()
         while time.time() - start < time_out:
             frame = self.frame
@@ -191,7 +191,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                 h, w = frame.shape[:2]
                 full_box = Box(0, 0, w, h)
                 for name in self.CHEST_NAMES:
-                    results = self.find_feature(name, box=full_box, threshold=0.6)
+                    results = self.find_feature(name, box=full_box, threshold=0.7)
                     if results:
                         self.log_debug(f"找到宝箱: {name}")
                         return results[0]
@@ -705,14 +705,14 @@ class MoKuaiJinBiTask(BaseQRSLTask):
 
                 self.last_shenlin_time = time.time()
 
-                # ===== 新增：自动战斗后立即寻找宝箱5秒 =====
+                # ===== 新增：自动战斗后立即寻找宝箱2秒 =====
                 self.log_info("自动战斗已开启，立即寻找宝箱2秒...")
                 chest = self.wait_any_chest(time_out=2)
                 if chest:
                     self.log_info("2秒内找到宝箱，关闭自动战斗并直接拾取")
                     # 再次点击自动战斗按钮关闭自动战斗
                     self.start_auto_combat()
-                    self.sleep(1)
+
 
                     if not self._phase_chest_pickup(chest):
                         self.log_error("宝箱拾取失败，跳过奖励领取")
