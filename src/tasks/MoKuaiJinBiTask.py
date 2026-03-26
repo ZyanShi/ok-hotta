@@ -21,7 +21,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             'BOSS选择': '罗贝拉格/朱厌',
             '等待超时': 900,
             '循环次数': 10000,
-            '搜索模式': '十字搜索',
+            '搜索模式': '米字搜索',
             '提示信息': (
                 "建议修改自动战斗索敌范围，文件在C:\\Users\\你的用户名\\AppData（文件夹上方查看，点击隐藏的项目）"
                 "\\Local\\Hotta\\Saved\\Config\\WindowsNoEditor，找到GameUserSettings.ini文件，"
@@ -35,10 +35,10 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             '搜索模式': '选择宝箱搜索方式',
             '提示信息': '索敌范围',
         }
-        self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['十字搜索', '米字搜索']}
+        self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/朱厌', '阿波菲斯', '幻蝎', '急冻机甲', '巴巴罗萨']
+            'options': ['罗贝拉格/朱厌', '阿波菲斯', '急冻机甲', '巴巴罗萨','幻蝎']
         }
         self._source_key = self._get_source_key()
         self.boss_image_map = {
@@ -105,7 +105,6 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.send_key_safe('w', down_time=2.5)
         self.log_info("开启自动战斗")
         self.start_auto_combat()
-        self.sleep(1)
         return True
 
     def wait_for_main_page_color(self, timeout):
@@ -176,7 +175,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                     return True
                 else:
                     self.log_debug("至少一个点仍匹配存在色，继续等待")
-            self.sleep(2)
+            self.sleep(1)
 
         self.log_error(f"等待首领提示消失超时（{timeout}秒）")
         return False
@@ -616,8 +615,8 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             self.log_error("多次接近后文字仍未稳定存在，拾取失败")
             return False
 
-        self.log_info("等待2秒后检测角色状态...")
-        self.sleep(2)
+        self.log_info("等待1秒后检测角色状态...")
+        self.sleep(1)
 
         if self._is_character_state_normal():
             self.log_info("角色状态正常，继续拾取")
@@ -711,7 +710,6 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                     self.log_info("2秒内找到宝箱，关闭自动战斗并直接拾取")
                     # 再次点击自动战斗按钮关闭自动战斗
                     self.start_auto_combat()
-
 
                     if not self._phase_chest_pickup(chest):
                         self.log_error("宝箱拾取失败，跳过奖励领取")
