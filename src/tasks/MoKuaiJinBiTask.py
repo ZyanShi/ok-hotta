@@ -38,13 +38,15 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['十字搜索', '米字搜索']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/朱厌', '阿波菲斯', '幻蝎']
+            'options': ['罗贝拉格/朱厌', '阿波菲斯', '幻蝎', '急冻机甲', '巴巴罗萨']
         }
         self._source_key = self._get_source_key()
         self.boss_image_map = {
             '罗贝拉格/朱厌': None,
             '阿波菲斯': 'Apophis',
-            # 幻蝎无需图片，直接点击坐标
+            '幻蝎': 'huanxie',
+            '急冻机甲': 'CryoLobster',
+            '巴巴罗萨': 'Barbarossa',
         }
         self.last_shenlin_time = 0
 
@@ -68,17 +70,14 @@ class MoKuaiJinBiTask(BaseQRSLTask):
     def _select_boss_by_config(self):
         boss_choice = self.config.get('BOSS选择', '罗贝拉格/朱厌')
 
-        if boss_choice == '幻蝎':
-            x, y = self._get_scaled_coordinates(1340, 920)
-            self.log_info(f"幻蝎: 点击固定坐标 ({x}, {y})")
-            self._click_safe(x, y, after_sleep=1)
-            return True
-
+        # 获取对应的图片名
         image_name = self.boss_image_map.get(boss_choice)
         if image_name is None:
+            # 罗贝拉格/朱厌 无需额外操作
             self.log_info(f"BOSS选择为 [{boss_choice}]，无需额外操作")
             return True
 
+        # 其他 BOSS 使用图片识别并点击
         self.log_info(f"BOSS选择为 [{boss_choice}]，等待图片 [{image_name}]")
         return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1)
 
