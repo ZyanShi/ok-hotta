@@ -34,115 +34,115 @@
       "width": 1920,
       "height": 1080,
       "id": 5,
-      "file_name": "images\\4c3f69b2-66e73d7e-5f90-4763-b667-b01918cb6a4e.png"
-    },
-    {
-      "width": 1920,
-      "height": 1080,
-      "id": 6,
       "file_name": "images\\d166f22f-6.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 7,
+      "id": 6,
       "file_name": "images\\87dcaaca-7.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 8,
+      "id": 7,
       "file_name": "images\\6e485fc1-8.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 9,
+      "id": 8,
       "file_name": "images\\1cc2f180-9.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 10,
+      "id": 9,
       "file_name": "images\\b54c6295-10.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 11,
+      "id": 10,
       "file_name": "images\\5a905baf-11.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 12,
+      "id": 11,
       "file_name": "images\\a34f3fe8-12.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 13,
+      "id": 12,
       "file_name": "images\\d005836d-13.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 14,
+      "id": 13,
       "file_name": "images\\af84f783-14.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 15,
+      "id": 14,
       "file_name": "images\\b53571ab-15.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 16,
+      "id": 15,
       "file_name": "images\\7372f0b3-16.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 17,
+      "id": 16,
       "file_name": "images\\36841939-17.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 18,
+      "id": 17,
       "file_name": "images\\7602ed24-18.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 19,
+      "id": 18,
       "file_name": "images\\ff1fc0b1-19.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 20,
+      "id": 19,
       "file_name": "images\\cfb7ae85-20.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 21,
+      "id": 20,
       "file_name": "images\\5b792b12-21.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 22,
+      "id": 21,
       "file_name": "images\\7a93f3e4-22.png"
     },
     {
       "width": 1920,
       "height": 1080,
-      "id": 23,
+      "id": 22,
       "file_name": "images\\48f531f7-23.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 23,
+      "file_name": "images\\e7aca66f-5.png"
     }
   ],
   "categories": [
@@ -357,21 +357,6 @@
     {
       "id": 6,
       "image_id": 5,
-      "category_id": 7,
-      "segmentation": [],
-      "bbox": [
-        946.3559465571493,
-        468.9552713529516,
-        19.20127801271574,
-        15.527990045065815
-      ],
-      "ignore": 0,
-      "iscrowd": 0,
-      "area": 298.15725383399115
-    },
-    {
-      "id": 7,
-      "image_id": 6,
       "category_id": 8,
       "segmentation": [],
       "bbox": [
@@ -385,8 +370,8 @@
       "area": 313.38110421942974
     },
     {
-      "id": 8,
-      "image_id": 7,
+      "id": 7,
+      "image_id": 6,
       "category_id": 9,
       "segmentation": [],
       "bbox": [
@@ -400,8 +385,8 @@
       "area": 485.6262229771323
     },
     {
-      "id": 9,
-      "image_id": 8,
+      "id": 8,
+      "image_id": 7,
       "category_id": 10,
       "segmentation": [],
       "bbox": [
@@ -415,8 +400,8 @@
       "area": 364.34746451322076
     },
     {
-      "id": 10,
-      "image_id": 9,
+      "id": 9,
+      "image_id": 8,
       "category_id": 11,
       "segmentation": [],
       "bbox": [
@@ -430,8 +415,8 @@
       "area": 15394.52034039544
     },
     {
-      "id": 11,
-      "image_id": 10,
+      "id": 10,
+      "image_id": 9,
       "category_id": 15,
       "segmentation": [],
       "bbox": [
@@ -445,8 +430,8 @@
       "area": 1129.6881067220856
     },
     {
-      "id": 12,
-      "image_id": 10,
+      "id": 11,
+      "image_id": 9,
       "category_id": 14,
       "segmentation": [],
       "bbox": [
@@ -460,8 +445,8 @@
       "area": 1066.9170518206552
     },
     {
-      "id": 13,
-      "image_id": 11,
+      "id": 12,
+      "image_id": 10,
       "category_id": 17,
       "segmentation": [],
       "bbox": [
@@ -475,8 +460,8 @@
       "area": 12357.506123582736
     },
     {
-      "id": 14,
-      "image_id": 12,
+      "id": 13,
+      "image_id": 11,
       "category_id": 25,
       "segmentation": [],
       "bbox": [
@@ -490,8 +475,8 @@
       "area": 3730.814878412174
     },
     {
-      "id": 15,
-      "image_id": 13,
+      "id": 14,
+      "image_id": 12,
       "category_id": 22,
       "segmentation": [],
       "bbox": [
@@ -505,8 +490,8 @@
       "area": 7487.8109138657965
     },
     {
-      "id": 16,
-      "image_id": 14,
+      "id": 15,
+      "image_id": 13,
       "category_id": 23,
       "segmentation": [],
       "bbox": [
@@ -520,8 +505,8 @@
       "area": 6096.936946036719
     },
     {
-      "id": 17,
-      "image_id": 15,
+      "id": 16,
+      "image_id": 14,
       "category_id": 16,
       "segmentation": [],
       "bbox": [
@@ -535,8 +520,8 @@
       "area": 2421.7570263377197
     },
     {
-      "id": 18,
-      "image_id": 16,
+      "id": 17,
+      "image_id": 15,
       "category_id": 19,
       "segmentation": [],
       "bbox": [
@@ -550,8 +535,8 @@
       "area": 6440.564632206272
     },
     {
-      "id": 19,
-      "image_id": 17,
+      "id": 18,
+      "image_id": 16,
       "category_id": 28,
       "segmentation": [],
       "bbox": [
@@ -565,8 +550,8 @@
       "area": 217185.78823767076
     },
     {
-      "id": 20,
-      "image_id": 18,
+      "id": 19,
+      "image_id": 17,
       "category_id": 20,
       "segmentation": [],
       "bbox": [
@@ -580,8 +565,8 @@
       "area": 10838.999015176425
     },
     {
-      "id": 21,
-      "image_id": 19,
+      "id": 20,
+      "image_id": 18,
       "category_id": 13,
       "segmentation": [],
       "bbox": [
@@ -595,8 +580,8 @@
       "area": 8099.795459710612
     },
     {
-      "id": 22,
-      "image_id": 20,
+      "id": 21,
+      "image_id": 19,
       "category_id": 26,
       "segmentation": [],
       "bbox": [
@@ -610,8 +595,8 @@
       "area": 9228.857857124809
     },
     {
-      "id": 23,
-      "image_id": 21,
+      "id": 22,
+      "image_id": 20,
       "category_id": 5,
       "segmentation": [],
       "bbox": [
@@ -625,8 +610,8 @@
       "area": 9395.762733264297
     },
     {
-      "id": 24,
-      "image_id": 22,
+      "id": 23,
+      "image_id": 21,
       "category_id": 0,
       "segmentation": [],
       "bbox": [
@@ -640,8 +625,8 @@
       "area": 3560.637357642485
     },
     {
-      "id": 25,
-      "image_id": 22,
+      "id": 24,
+      "image_id": 21,
       "category_id": 2,
       "segmentation": [],
       "bbox": [
@@ -655,8 +640,8 @@
       "area": 2591.9345471073984
     },
     {
-      "id": 26,
-      "image_id": 22,
+      "id": 25,
+      "image_id": 21,
       "category_id": 1,
       "segmentation": [],
       "bbox": [
@@ -670,8 +655,8 @@
       "area": 2447.938183379211
     },
     {
-      "id": 27,
-      "image_id": 23,
+      "id": 26,
+      "image_id": 22,
       "category_id": 18,
       "segmentation": [],
       "bbox": [
@@ -683,6 +668,21 @@
       "ignore": 0,
       "iscrowd": 0,
       "area": 2356.3041337340046
+    },
+    {
+      "id": 27,
+      "image_id": 23,
+      "category_id": 7,
+      "segmentation": [],
+      "bbox": [
+        945.1938585055127,
+        468.14957677682037,
+        20.86615030590989,
+        16.929140814228724
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 353.2459967796103
     }
   ],
   "info": {
@@ -691,6 +691,6 @@
     "description": "",
     "contributor": "Label Studio",
     "url": "",
-    "date_created": "2026-03-26 14:40:06.164474"
+    "date_created": "2026-03-26 15:39:43.746486"
   }
 }
