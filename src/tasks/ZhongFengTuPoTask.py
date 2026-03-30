@@ -6,13 +6,13 @@ from src.tasks.BaseQRSLTask import BaseQRSLTask
 
 class ZhongFengTuPoTask(BaseQRSLTask):
     """众峰突破自动化任务
-    自动完成众峰突破刷取潜能点，菜单栏需要换成新版本。
+    自动完成众峰突破刷取潜能点。
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "众峰突破"
-        self.description = "自动完成众峰突破刷取潜能点，菜单栏需要换成新版本"
+        self.description = "自动完成众峰突破刷取潜能点"
         self.icon = FluentIcon.FLAG
 
         self.default_config.update({
