@@ -143,6 +143,12 @@
       "height": 1080,
       "id": 23,
       "file_name": "images\\e7aca66f-5.png"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "id": 24,
+      "file_name": "images\\ceb61f50-24.png"
     }
   ],
   "categories": [
@@ -160,59 +166,59 @@
     },
     {
       "id": 3,
-      "name": "attend"
+      "name": "Sweetie"
     },
     {
       "id": 4,
-      "name": "back"
+      "name": "attend"
     },
     {
       "id": 5,
-      "name": "cancel"
+      "name": "back"
     },
     {
       "id": 6,
-      "name": "chest1"
+      "name": "cancel"
     },
     {
       "id": 7,
-      "name": "chest2"
+      "name": "chest1"
     },
     {
       "id": 8,
-      "name": "chest3"
+      "name": "chest2"
     },
     {
       "id": 9,
-      "name": "chest4"
+      "name": "chest3"
     },
     {
       "id": 10,
-      "name": "chest5"
+      "name": "chest4"
     },
     {
       "id": 11,
-      "name": "confirm"
+      "name": "chest5"
     },
     {
       "id": 12,
-      "name": "enter"
+      "name": "confirm"
     },
     {
       "id": 13,
-      "name": "enterchallenge"
+      "name": "enter"
     },
     {
       "id": 14,
-      "name": "fishing bait"
+      "name": "enterchallenge"
     },
     {
       "id": 15,
-      "name": "fishing rod"
+      "name": "fishing bait"
     },
     {
       "id": 16,
-      "name": "gonghui"
+      "name": "fishing rod"
     },
     {
       "id": 17,
@@ -220,46 +226,54 @@
     },
     {
       "id": 18,
-      "name": "huanxie"
+      "name": "guild1"
     },
     {
       "id": 19,
-      "name": "huodong"
+      "name": "guild2"
     },
     {
       "id": 20,
-      "name": "jinruzhandou"
+      "name": "huanxie"
     },
     {
       "id": 21,
-      "name": "mainpage"
+      "name": "huodong"
     },
     {
       "id": 22,
-      "name": "openchest1"
+      "name": "jinruzhandou"
     },
     {
       "id": 23,
-      "name": "openchest2"
+      "name": "mainpage"
     },
     {
       "id": 24,
-      "name": "opened chest"
+      "name": "openchest1"
     },
     {
       "id": 25,
-      "name": "shenlin"
+      "name": "openchest2"
     },
     {
       "id": 26,
-      "name": "sure"
+      "name": "opened chest"
     },
     {
       "id": 27,
-      "name": "unopened chest"
+      "name": "shenlin"
     },
     {
       "id": 28,
+      "name": "sure"
+    },
+    {
+      "id": 29,
+      "name": "unopened chest"
+    },
+    {
+      "id": 30,
       "name": "zhongfengtupo"
     }
   ],
@@ -267,7 +281,7 @@
     {
       "id": 0,
       "image_id": 0,
-      "category_id": 3,
+      "category_id": 4,
       "segmentation": [],
       "bbox": [
         1591.9597989949748,
@@ -282,7 +296,7 @@
     {
       "id": 1,
       "image_id": 0,
-      "category_id": 4,
+      "category_id": 5,
       "segmentation": [],
       "bbox": [
         27.66804286449728,
@@ -297,7 +311,7 @@
     {
       "id": 2,
       "image_id": 1,
-      "category_id": 12,
+      "category_id": 13,
       "segmentation": [],
       "bbox": [
         521.005025125628,
@@ -312,7 +326,7 @@
     {
       "id": 3,
       "image_id": 2,
-      "category_id": 27,
+      "category_id": 29,
       "segmentation": [],
       "bbox": [
         1701.3424298415246,
@@ -327,7 +341,7 @@
     {
       "id": 4,
       "image_id": 3,
-      "category_id": 6,
+      "category_id": 7,
       "segmentation": [],
       "bbox": [
         1555.3945387207016,
@@ -342,7 +356,7 @@
     {
       "id": 5,
       "image_id": 4,
-      "category_id": 24,
+      "category_id": 26,
       "segmentation": [],
       "bbox": [
         1701.102272262532,
@@ -357,7 +371,7 @@
     {
       "id": 6,
       "image_id": 5,
-      "category_id": 8,
+      "category_id": 9,
       "segmentation": [],
       "bbox": [
         820.9533159770357,
@@ -372,7 +386,7 @@
     {
       "id": 7,
       "image_id": 6,
-      "category_id": 9,
+      "category_id": 10,
       "segmentation": [],
       "bbox": [
         385.7489978866579,
@@ -387,7 +401,7 @@
     {
       "id": 8,
       "image_id": 7,
-      "category_id": 10,
+      "category_id": 11,
       "segmentation": [],
       "bbox": [
         1058.2320199591152,
@@ -402,7 +416,7 @@
     {
       "id": 9,
       "image_id": 8,
-      "category_id": 11,
+      "category_id": 12,
       "segmentation": [],
       "bbox": [
         1134.2713567839194,
@@ -417,7 +431,7 @@
     {
       "id": 10,
       "image_id": 9,
-      "category_id": 15,
+      "category_id": 16,
       "segmentation": [],
       "bbox": [
         1838.0629584591331,
@@ -432,7 +446,7 @@
     {
       "id": 11,
       "image_id": 9,
-      "category_id": 14,
+      "category_id": 15,
       "segmentation": [],
       "bbox": [
         1838.7912802071112,
@@ -462,7 +476,7 @@
     {
       "id": 13,
       "image_id": 11,
-      "category_id": 25,
+      "category_id": 27,
       "segmentation": [],
       "bbox": [
         1686.0301507537683,
@@ -477,7 +491,7 @@
     {
       "id": 14,
       "image_id": 12,
-      "category_id": 22,
+      "category_id": 24,
       "segmentation": [],
       "bbox": [
         1615.4773869346734,
@@ -492,7 +506,7 @@
     {
       "id": 15,
       "image_id": 13,
-      "category_id": 23,
+      "category_id": 25,
       "segmentation": [],
       "bbox": [
         1640.8040201005026,
@@ -507,22 +521,22 @@
     {
       "id": 16,
       "image_id": 14,
-      "category_id": 16,
+      "category_id": 18,
       "segmentation": [],
       "bbox": [
-        1628.1407035175878,
-        542.713567839196,
-        36.180904522613034,
-        66.93467336683426
+        1633.9255014326648,
+        548.3094555873927,
+        27.507163323782333,
+        53.180515759312236
       ],
       "ignore": 0,
       "iscrowd": 0,
-      "area": 2421.7570263377197
+      "area": 1462.8451326343818
     },
     {
       "id": 17,
       "image_id": 15,
-      "category_id": 19,
+      "category_id": 21,
       "segmentation": [],
       "bbox": [
         1311.5577889447234,
@@ -537,7 +551,7 @@
     {
       "id": 18,
       "image_id": 16,
-      "category_id": 28,
+      "category_id": 30,
       "segmentation": [],
       "bbox": [
         387.13567839195974,
@@ -552,7 +566,7 @@
     {
       "id": 19,
       "image_id": 17,
-      "category_id": 20,
+      "category_id": 22,
       "segmentation": [],
       "bbox": [
         823.115577889447,
@@ -567,7 +581,7 @@
     {
       "id": 20,
       "image_id": 18,
-      "category_id": 13,
+      "category_id": 14,
       "segmentation": [],
       "bbox": [
         1648.0402010050248,
@@ -582,7 +596,7 @@
     {
       "id": 21,
       "image_id": 19,
-      "category_id": 26,
+      "category_id": 28,
       "segmentation": [],
       "bbox": [
         1177.6884422110552,
@@ -597,7 +611,7 @@
     {
       "id": 22,
       "image_id": 20,
-      "category_id": 5,
+      "category_id": 6,
       "segmentation": [],
       "bbox": [
         553.5678391959798,
@@ -656,8 +670,23 @@
     },
     {
       "id": 26,
+      "image_id": 21,
+      "category_id": 3,
+      "segmentation": [],
+      "bbox": [
+        1456.2814070351753,
+        897.286432160804,
+        34.37185929648267,
+        75.97989949748762
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 2611.570414888539
+    },
+    {
+      "id": 27,
       "image_id": 22,
-      "category_id": 18,
+      "category_id": 20,
       "segmentation": [],
       "bbox": [
         1331.4572864321608,
@@ -670,9 +699,9 @@
       "area": 2356.3041337340046
     },
     {
-      "id": 27,
+      "id": 28,
       "image_id": 23,
-      "category_id": 7,
+      "category_id": 8,
       "segmentation": [],
       "bbox": [
         945.1938585055127,
@@ -683,6 +712,21 @@
       "ignore": 0,
       "iscrowd": 0,
       "area": 353.2459967796103
+    },
+    {
+      "id": 29,
+      "image_id": 24,
+      "category_id": 19,
+      "segmentation": [],
+      "bbox": [
+        1366.1891117478508,
+        223.72492836676213,
+        31.17478510028668,
+        67.85100286532956
+      ],
+      "ignore": 0,
+      "iscrowd": 0,
+      "area": 2115.240433165585
     }
   ],
   "info": {
@@ -691,6 +735,6 @@
     "description": "",
     "contributor": "Label Studio",
     "url": "",
-    "date_created": "2026-03-26 15:39:43.746486"
+    "date_created": "2026-03-30 14:23:47.017426"
   }
 }
