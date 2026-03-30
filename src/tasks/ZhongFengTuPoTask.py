@@ -5,7 +5,9 @@ from src.tasks.BaseQRSLTask import BaseQRSLTask
 
 
 class ZhongFengTuPoTask(BaseQRSLTask):
-    """众峰突破自动化任务"""
+    """众峰突破自动化任务
+    自动完成众峰突破刷取潜能点，菜单栏需要换成新版本。
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -27,10 +29,11 @@ class ZhongFengTuPoTask(BaseQRSLTask):
         }
 
     def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0, raise_if_not_found=False):
+        """等待指定特征图片出现并点击"""
         box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False)
         if box:
             self.log_info(f"找到并点击 [{feature_name}]")
-            self._click_box_safe(box)                              # 替换
+            self._click_box_safe(box)
             if after_sleep > 0:
                 self.sleep(after_sleep)
             return True
@@ -40,6 +43,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
         return False
 
     def _wait_for_any_feature(self, feature_names, timeout, after_sleep=0):
+        """等待任意一个特征图片出现，返回 (box, name)"""
         start = time.time()
         while time.time() - start < timeout:
             for name in feature_names:
@@ -54,6 +58,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
         return None, None
 
     def run(self):
+        """任务主循环"""
         try:
             self.log_info("===== 众峰突破任务启动 =====", notify=True)
             max_loops = self.config.get('循环次数', 10000)
@@ -72,10 +77,14 @@ class ZhongFengTuPoTask(BaseQRSLTask):
                 self.send_key_safe('esc', down_time=0.02)
                 self.sleep(1)
 
-                if not self._wait_and_click_feature('gonghui', timeout=5, after_sleep=0):
-                    self.log_error("未找到工会图标，跳过本次循环")
+                # 修改点：等待 guild1 或 guild2 出现并点击
+                box, name = self._wait_for_any_feature(['guild1', 'guild2'], timeout=5, after_sleep=0)
+                if box is None:
+                    self.log_error("未找到工会图标（guild1/guild2），跳过本次循环")
                     self.sleep(5)
                     continue
+                self.log_info(f"找到并点击工会图标 [{name}]")
+                self._click_box_safe(box)
 
                 if not self._wait_and_click_feature('huodong', timeout=10, after_sleep=0):
                     self.log_error("未找到活动图标，跳过本次循环")
@@ -95,7 +104,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
 
                 if name == 'jinruzhandou':
                     self.log_info("检测到进入战斗按钮，点击它")
-                    self._click_box_safe(box)                      # 替换
+                    self._click_box_safe(box)
                     self.sleep(1)
 
                 self.log_info("已进入众峰突破界面")

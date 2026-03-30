@@ -38,7 +38,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/朱厌', '阿波菲斯', '急冻机甲', '巴巴罗萨','幻蝎']
+            'options': ['罗贝拉格/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎']
         }
         self._source_key = self._get_source_key()
         self.boss_image_map = {
@@ -47,10 +47,12 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             '幻蝎': 'huanxie',
             '急冻机甲': 'CryoLobster',
             '巴巴罗萨': 'Barbarossa',
+            '露琪亚': 'Sweetie',          # 新增露琪亚，识别图片 Sweetie
         }
         self.last_shenlin_time = 0
 
     def _get_source_key(self):
+        """获取全局源器键配置"""
         try:
             global_config = self.get_global_config(key_config_option)
             return global_config.get('源器键', 'x')
@@ -59,6 +61,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             return 'x'
 
     def _open_map_and_enter_boss(self):
+        """打开地图并进入世界BOSS界面"""
         self.log_info("按M打开地图")
         self.send_key('m')
         self.sleep(2)
@@ -68,6 +71,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return True
 
     def _select_boss_by_config(self):
+        """根据配置选择对应的BOSS（点击图片）"""
         boss_choice = self.config.get('BOSS选择', '罗贝拉格/朱厌')
 
         # 获取对应的图片名
@@ -82,6 +86,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1)
 
     def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0):
+        """等待特征图片出现并点击"""
         box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False)
         if box:
             self.log_info(f"找到并点击 [{feature_name}]")
@@ -93,6 +98,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return False
 
     def _wait_main_page_and_activate(self):
+        """等待返回主页面并激活自动战斗"""
         self.log_info("等待返回游戏主页面...")
         if not self.wait_for_main_page_color(timeout=60):
             return False
@@ -108,6 +114,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return True
 
     def wait_for_main_page_color(self, timeout):
+        """等待主页面颜色特征出现"""
         start = time.time()
         while time.time() - start < timeout:
             if self.check_main_page_color():
@@ -116,6 +123,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return False
 
     def check_main_page_color(self):
+        """检查主页面颜色点是否匹配"""
         frame = self.frame
         if frame is None:
             return False
@@ -138,6 +146,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return 'timeout'
 
     def _is_boss_spawned(self):
+        """判断首领是否刷新（基于两点颜色检测）"""
         frame = self.frame
         if frame is None:
             return False
@@ -153,6 +162,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return color1_match and color2_match
 
     def _phase_b_wait_boss_ui_disappear(self, timeout=600):
+        """等待首领提示UI消失（双点检测）"""
         self.log_info(f"等待首领提示消失，超时{timeout}秒（单次判定，双点检测）...")
         start = time.time()
         while time.time() - start < timeout:
@@ -175,12 +185,13 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                     return True
                 else:
                     self.log_debug("至少一个点仍匹配存在色，继续等待")
-            self.sleep(1)
+            self.sleep(0.2)
 
         self.log_error(f"等待首领提示消失超时（{timeout}秒）")
         return False
 
     def wait_any_chest(self, time_out=30):
+        """等待任意宝箱出现，返回第一个找到的宝箱框"""
         self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.7")
         start = time.time()
         while time.time() - start < time_out:
@@ -197,6 +208,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return None
 
     def _reacquire_chest(self):
+        """重新获取宝箱（多次尝试）"""
         for _ in range(10):
             frame = self.frame
             if frame is not None:
@@ -209,8 +221,9 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             self.sleep(0.5)
         return None
 
-    # ==================== 修改后的十字搜索 ====================
+    # ==================== 搜索方法 ====================
     def _cross_search(self):
+        """十字搜索宝箱（移动+搜索）"""
         self.log_info("启动十字搜索，宝箱阈值0.6")
         found_event = threading.Event()
         stop_event = threading.Event()
@@ -231,13 +244,11 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                                     self.log_info(f"十字搜索找到宝箱: {name}")
                                     found_event.set()
                                     break
-                        # 每次循环后 sleep 一小段时间，sleep 会检查任务是否被停止
                         for _ in range(3):
                             if stop_event.is_set():
                                 break
                             self.sleep(0.033)   # 可能抛出 TaskDisabledException
                     except TaskDisabledException:
-                        # 任务被停止，设置停止事件并退出线程
                         self.log_debug("十字搜索线程检测到任务停止")
                         stop_event.set()
                         break
@@ -264,7 +275,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                         while time.time() - press_start < down_time:
                             if stop_event.is_set() or found_event.is_set():
                                 break
-                            self.sleep(0.05)   # 可能抛出 TaskDisabledException
+                            self.sleep(0.05)
                     except TaskDisabledException:
                         self.log_debug("十字移动线程检测到任务停止")
                         stop_event.set()
@@ -285,21 +296,17 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         t2.start()
 
         try:
-            # 主线程循环等待，定期检查停止信号
             while t1.is_alive() or t2.is_alive():
-                self.sleep(0.1)   # 关键：这里会抛出 TaskDisabledException
+                self.sleep(0.1)
                 if found_event.is_set():
-                    # 找到宝箱，提前停止移动线程
                     stop_event.set()
         except TaskDisabledException:
             self.log_info("十字搜索被用户手动停止")
             stop_event.set()
-            # 等待线程结束，但不再阻塞响应
             t1.join(timeout=1)
             t2.join(timeout=1)
-            raise   # 重新抛出异常，让上层捕获
+            raise
 
-        # 确保线程完全结束
         t1.join()
         t2.join()
 
@@ -309,8 +316,8 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.log_info("十字移动序列结束，未找到宝箱")
         return None
 
-    # ==================== 修改后的米字搜索 ====================
     def _mi_search(self):
+        """米字搜索宝箱（更复杂的移动序列）"""
         self.log_info("启动米字搜索，宝箱阈值0.6，执行完整移动序列")
         found_event = threading.Event()
         stop_event = threading.Event()
@@ -431,15 +438,15 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.log_info("米字移动序列结束，未找到宝箱")
         return None
 
-    # ========================================================
-
     def cross_search(self):
+        """根据配置选择十字或米字搜索"""
         mode = self.config.get('搜索模式', '十字搜索')
         if mode == '十字搜索':
             return self._cross_search()
         return self._mi_search()
 
     def _sleep_with_events(self, seconds, stop_event, found_event):
+        """可被事件中断的sleep"""
         interval = 0.2
         elapsed = 0
         while elapsed < seconds:
@@ -449,6 +456,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             elapsed += interval
 
     def _recover_character_state(self):
+        """尝试恢复角色状态（按下S键）"""
         self.log_info("角色状态异常，尝试按S键恢复，超时150秒")
         start_time = time.time()
         timeout = 150
@@ -463,6 +471,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return False
 
     def _is_character_state_normal(self):
+        """检查角色状态是否正常（通过颜色点）"""
         frame = self.frame
         if frame is None:
             return False
@@ -478,6 +487,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return diff_sum <= 50
 
     def approach_bosschest(self, max_walk_time=60, target_chest=None):
+        """接近宝箱并检测目标文字"""
         locked_chest_type = None
         if target_chest is not None:
             self.log_debug(f"approach_bosschest: 使用已有宝箱 {target_chest.name}")
@@ -516,17 +526,14 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                 except Exception as e:
                     self.log_debug(f"OCR检测异常: {e}")
 
-                # 修改点：只要检测到目标文字就立即返回成功
                 if target_detected:
                     self.log_info("检测到目标文字，接近成功")
                     return True
 
-                # 控制按键频率
                 if current_time - last_key_press_time < key_press_interval:
                     self.sleep(0.05)
                     continue
 
-                # 获取当前画面，尝试用模板匹配锁定宝箱位置
                 frame = self.frame
                 if frame is None:
                     continue
@@ -576,6 +583,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             raise
 
     def _phase_chest_pickup(self, chest_box=None):
+        """拾取宝箱阶段"""
         self.log_info("进入宝箱拾取阶段")
 
         max_retries = 3
@@ -649,12 +657,14 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return False
 
     def _claim_reward(self):
+        """领取奖励"""
         x, y = self._get_scaled_coordinates(1255, 575)
         self.log_info(f"点击奖励坐标 ({x}, {y})")
         self._click_safe(x, y, after_sleep=7)
         return True
 
     def run(self):
+        """任务主循环"""
         try:
             self.log_info("===== 模块金币任务启动 =====", notify=True)
             wait_timeout = self.config.get('等待超时', 900)
@@ -703,12 +713,11 @@ class MoKuaiJinBiTask(BaseQRSLTask):
 
                 self.last_shenlin_time = time.time()
 
-                # ===== 新增：自动战斗后立即寻找宝箱2秒 =====
+                # 自动战斗后立即寻找宝箱2秒
                 self.log_info("自动战斗已开启，立即寻找宝箱2秒...")
                 chest = self.wait_any_chest(time_out=2)
                 if chest:
                     self.log_info("2秒内找到宝箱，关闭自动战斗并直接拾取")
-                    # 再次点击自动战斗按钮关闭自动战斗
                     self.start_auto_combat()
 
                     if not self._phase_chest_pickup(chest):
@@ -716,12 +725,11 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                     else:
                         if not self._claim_reward():
                             self.log_error("奖励领取失败")
-                    # 本次循环结束，直接进入下一次循环
                     elapsed = time.time() - loop_start_time
                     self.log_info(f"本次循环总耗时 {elapsed:.1f}秒")
-                    continue  # 跳过后续BOSS监测
+                    continue
 
-                # 没找到宝箱，进入BOSS监测阶段（仅监测BOSS刷新）
+                # 没找到宝箱，进入BOSS监测阶段
                 self.log_info("5秒内未找到宝箱，开始监测BOSS刷新")
                 monitor_result = self._monitor_boss_spawn_only(wait_timeout)
 
@@ -732,9 +740,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
                         self.sleep(5)
                         continue
 
-                    # 重新开启自动战斗（可能被UI打断）
                     self.start_auto_combat()
-                    # 先等待5秒看宝箱是否出现
                     chest = self.wait_any_chest(time_out=5)
                     if not chest:
                         self.log_info("5秒内未找到宝箱，启动搜索")
