@@ -13,55 +13,50 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [3.12]
+        python-version: [ 3.12 ]
 
     steps:
-      - name: Configure git (UTF-8 & line endings)
+      - name: Configure git
         run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           git config --global core.autocrlf false
           git config --global core.eol lf
           git config --global user.email "ZyanShi@users.noreply.github.com"
           git config --global user.name "ZyanShi"
+          echo "action_state=yellow" >> $env:GITHUB_ENV
+          echo "${{ env.action_state }}"
 
       - uses: actions/checkout@v4
         with:
           lfs: true
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5   # 从 v2 升级到 v5
+        uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Set UTF-8 encoding (Windows)
+          
+      - name: Set UTF-8 encoding
         run: |
-          echo "PYTHONIOENCODING=utf-8" >> $env:GITHUB_ENV
-          echo "PYTHONLEGACYWINDOWSSTDIO=utf-8" >> $env:GITHUB_ENV
+          set PYTHONIOENCODING=utf-8
+          set PYTHONLEGACYWINDOWSSTDIO=utf-8
+          echo PYTHONIOENCODING=utf-8 >> $GITHUB_ENV
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          if (Test-Path requirements.txt) {
-            pip install -r requirements.txt
-          } else {
-            Write-Host "⚠️ requirements.txt not found, skipping"
-          }
+          pip install -r requirements.txt
 
-      - name: Run inline_ok_requirements
+      - name: inline_ok_requirements
         run: |
           python -m ok.update.inline_ok_requirements --tag ${{ github.ref_name }}
 
       - name: Run tests
         run: |
-          if (Test-Path .\tests\) {
-            Get-ChildItem -Path ".\tests\*.py" | ForEach-Object {
+          Get-ChildItem -Path ".\tests\*.py" | ForEach-Object {
               Write-Host "Running tests in $($_.FullName)"
               python -m unittest $_.FullName
-            }
-          } else {
-            Write-Host "⚠️ No tests folder found, skipping tests"
           }
 
-      # 删除或注释掉同步步骤，因为你不需要同步到原作者的仓库（已保留注释）
+      # 删除或注释掉同步步骤，因为你不需要同步到原作者的仓库
       # - name: Sync Repositories
       #   id: sync
       #   uses: ok-oldking/partial-sync-repo@master
@@ -82,7 +77,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: false
+          # 修改 body，不使用 sync 步骤的输出
           body: |
             ### 版本 ${{ github.ref_name }}
-            自动构建的 Release (Windows)
+            自动构建的 Release
           files: pyappify_dist/*
