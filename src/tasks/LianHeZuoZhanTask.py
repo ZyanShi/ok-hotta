@@ -15,12 +15,14 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.group_icon = FluentIcon.UP
         self.icon = FluentIcon.PEOPLE
 
-        # 配置项（UI显示顺序按字典定义顺序，'启用前进'在前）
+        # 配置项（UI显示顺序按字典定义顺序）
         self.default_config.update({
             '循环次数': 10000,
             '宝箱等待超时': 180,
-            '启用前进': False,      # 开关在前
-            '前进时间': 7,          # 时间在后
+            '启用前进': False,      # 前进开关
+            '前进时间': 9,          # 前进时长（秒）
+            '启用向右': False,      # 向右开关
+            '向右时间': 3,          # 向右时长（秒）
         })
 
         self.config_description = {
@@ -28,6 +30,8 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             '宝箱等待超时': '等待宝箱的超时时间（秒）',
             '启用前进': '是否执行前进步骤（若关闭则跳过前进，直接开启自动战斗）',
             '前进时间': '按W键前进的时间（秒）',
+            '启用向右': '是否执行向右移动步骤（在前进之后执行）',
+            '向右时间': '按D键向右移动的时间（秒）',
         }
 
     def run(self):
@@ -38,10 +42,13 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             max_loops = self.config.get('循环次数', 10000)
             chest_timeout = self.config.get('宝箱等待超时', 180)
             enable_forward = self.config.get('启用前进', False)
-            forward_time = self.config.get('前进时间', 7)
+            forward_time = self.config.get('前进时间', 9)
+            enable_right = self.config.get('启用向右', False)
+            right_time = self.config.get('向右时间', 3)
 
             self.log_info(f"配置参数: 循环次数={max_loops}, 宝箱超时={chest_timeout}秒, "
-                          f"启用前进={enable_forward}, 前进时间={forward_time}秒")
+                          f"启用前进={enable_forward}, 前进时间={forward_time}秒, "
+                          f"启用向右={enable_right}, 向右时间={right_time}秒")
 
             loop_count = 0
 
@@ -67,12 +74,19 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
                 self.log_info("成功进入副本")
 
-                # 根据开关决定是否前进
+                # 前进步骤
                 if enable_forward:
                     self.log_info(f"前进 {forward_time} 秒...")
                     self.send_key_safe('w', down_time=forward_time)
                 else:
                     self.log_info("前进功能已禁用，跳过前进步骤")
+
+                # 向右步骤（在前进之后执行）
+                if enable_right:
+                    self.log_info(f"向右移动 {right_time} 秒...")
+                    self.send_key_safe('d', down_time=right_time)
+                else:
+                    self.log_info("向右功能已禁用，跳过向右步骤")
 
                 # 开启自动战斗
                 self.log_info("开启自动战斗...")

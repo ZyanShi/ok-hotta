@@ -50,7 +50,7 @@ class BaseQRSLTask(BaseTask):
         def operation():
             self.send_key_down(alt_key)
             self.sleep(alt_down_delay)
-            self._click_safe(x, y, move_back=True, down_time=0.01, interval=0.4)  # 替换为 _click_safe
+            self._click_safe(x, y, move_back=True, down_time=0.01, interval=0.4)
             self.sleep(click_delay)
             self.send_key_up(alt_key)
         return self._execute_atomic_operation(operation)
@@ -133,12 +133,12 @@ class BaseQRSLTask(BaseTask):
             self.log_error("进入队伍失败，无法继续进入副本")
             return False
         self.log_info("点击'参加'按钮")
-        self._click_box_safe(attend_box, after_sleep=1)          # 替换
+        self._click_box_safe(attend_box, after_sleep=1)
         enter_box = self.wait_feature('enter', time_out=10, threshold=0.75)
         if not enter_box:
             self.log_error("未找到'进入'按钮")
             return False
-        self._click_box_safe(enter_box, after_sleep=0.5)         # 替换
+        self._click_box_safe(enter_box, after_sleep=0.5)
         return self.wait_for_exit_button_white(timeout=60)
 
     def exit_dungeon(self):
@@ -222,6 +222,7 @@ class BaseQRSLTask(BaseTask):
         locked_chest_type = None
         try:
             while time.time() - start_time < max_walk_time:
+                self.sleep(0)   # 检查任务是否被停止，保证停止信号能及时响应
                 current_time = time.time()
                 if self.find_one('opened chest', threshold=0.7):
                     self.sleep(0.5)
@@ -311,11 +312,8 @@ class BaseQRSLTask(BaseTask):
         try:
             self.send_key_down(key)
             self.sleep(down_time)
-            self.send_key_up(key)
-        except TaskDisabledException:
-            raise
-        except Exception:
-            self.send_key(key, down_time=down_time)
+        finally:
+            self.send_key_up(key)   # 确保按键被释放，无论是否发生异常
 
     def send_key_safe(self, key, down_time=0.1):
         self._send_key_safe(key, down_time)
