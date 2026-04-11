@@ -1,6 +1,5 @@
 import time
-from ok import BaseTask, Box
-from ok import TaskDisabledException
+from ok import BaseTask, Box, TaskDisabledException
 
 class BaseQRSLTask(BaseTask):
     """QRSL游戏专用基础任务类"""
@@ -35,13 +34,11 @@ class BaseQRSLTask(BaseTask):
             return False
 
     def _click_safe(self, x, y, **kwargs):
-        """安全的点击方法"""
         def operation():
             self.click(x, y, **kwargs)
         return self._execute_atomic_operation(operation)
 
     def _click_box_safe(self, box, **kwargs):
-        """安全的点击Box方法"""
         def operation():
             self.click_box(box, **kwargs)
         return self._execute_atomic_operation(operation)
@@ -87,6 +84,7 @@ class BaseQRSLTask(BaseTask):
         self.log_info(f"等待进入副本，超时{timeout}秒...")
         start_time = time.time()
         while time.time() - start_time < timeout:
+            self._check_stopped()
             if self.check_exit_button_color():
                 self.log_info("成功进入副本")
                 return True
@@ -98,6 +96,7 @@ class BaseQRSLTask(BaseTask):
         self.log_info(f"等待目标颜色出现，超时{timeout}秒...")
         start_time = time.time()
         while time.time() - start_time < timeout:
+            self._check_stopped()
             if self.check_target_color():
                 self.log_info("检测到目标颜色")
                 return True
@@ -108,6 +107,7 @@ class BaseQRSLTask(BaseTask):
     def enter_team(self, alt_down_delay=0.8, click_delay=1, alt_key='alt'):
         target_x, target_y = self._get_scaled_coordinates(*self.ENTER_TEAM_COORDS)
         for attempt in range(10):
+            self._check_stopped()
             success = self._click_with_alt(target_x, target_y, alt_down_delay, click_delay, alt_key)
             if not success:
                 continue
@@ -163,6 +163,7 @@ class BaseQRSLTask(BaseTask):
         max_attempts = 30
         attempts = 0
         while attempts < max_attempts:
+            self._check_stopped()
             attempts += 1
             frame = self.frame
             if frame is None:
@@ -198,6 +199,7 @@ class BaseQRSLTask(BaseTask):
     def wait_any_chest(self, time_out=30):
         start_time = time.time()
         while time.time() - start_time < time_out:
+            self._check_stopped()
             frame = self.frame
             if frame is None:
                 self.sleep(0.5)
@@ -222,7 +224,7 @@ class BaseQRSLTask(BaseTask):
         locked_chest_type = None
         try:
             while time.time() - start_time < max_walk_time:
-                self.sleep(0)   # 检查任务是否被停止，保证停止信号能及时响应
+                self._check_stopped()
                 current_time = time.time()
                 if self.find_one('opened chest', threshold=0.7):
                     self.sleep(0.5)
@@ -260,6 +262,8 @@ class BaseQRSLTask(BaseTask):
                 chest_x, chest_y = target_chest.center()
                 if not self._adjust_position(chest_x, chest_y, screen_center_x, width, height):
                     last_key_press_time = current_time
+        except TaskDisabledException:
+            raise
         except Exception as e:
             self.log_error(f"接近宝箱异常: {e}")
             return False
@@ -273,6 +277,7 @@ class BaseQRSLTask(BaseTask):
 
     def _reacquire_chest(self):
         for _ in range(10):
+            self._check_stopped()
             frame = self.frame
             if frame is None:
                 continue
@@ -311,9 +316,16 @@ class BaseQRSLTask(BaseTask):
     def _send_key_safe(self, key, down_time=0.1):
         try:
             self.send_key_down(key)
-            self.sleep(down_time)
+            elapsed = 0
+            interval = 0.1
+            while elapsed < down_time:
+                self._check_stopped()
+                remaining = down_time - elapsed
+                sleep_time = min(interval, remaining)
+                self.sleep(sleep_time)
+                elapsed += sleep_time
         finally:
-            self.send_key_up(key)   # 确保按键被释放，无论是否发生异常
+            self.send_key_up(key)
 
     def send_key_safe(self, key, down_time=0.1):
         self._send_key_safe(key, down_time)
@@ -322,6 +334,7 @@ class BaseQRSLTask(BaseTask):
         self.log_info(f"等待主页颜色出现，超时{timeout}秒...")
         start_time = time.time()
         while time.time() - start_time < timeout:
+            self._check_stopped()
             frame = self.frame
             if frame is None:
                 self.sleep(0.5)
@@ -338,3 +351,11 @@ class BaseQRSLTask(BaseTask):
             self.sleep(0.5)
         self.log_error("等待主页颜色超时")
         return False
+
+    def _check_stopped(self):
+        if hasattr(self, 'disabled') and self.disabled:
+            raise TaskDisabledException("任务已被用户停止")
+        if hasattr(self, '_disabled') and self._disabled:
+            raise TaskDisabledException("任务已被用户停止")
+        if hasattr(self, 'is_disabled') and self.is_disabled():
+            raise TaskDisabledException("任务已被用户停止")
