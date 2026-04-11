@@ -48,7 +48,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             '急冻机甲': 'CryoLobster',
             '巴巴罗萨': 'Barbarossa',
             '露琪亚': 'Sweetie',
-            '玛格玛': None,   # 玛格玛不使用图片识别，走特殊逻辑
+            '玛格玛（前台无遮挡）': None,   # 玛格玛不使用图片识别，走特殊逻辑
         }
         self.last_shenlin_time = 0
 
@@ -76,7 +76,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         boss_choice = self.config.get('BOSS选择', '罗贝拉格/朱厌')
 
         # 特殊处理：玛格玛（移动+滚轮+点击）
-        if boss_choice == '玛格玛':
+        if boss_choice == '玛格玛（前台无遮挡）':
             self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
             x, y = self._get_scaled_coordinates(1730, 935)
             self.move(x, y)                # 鼠标移动到指定位置
