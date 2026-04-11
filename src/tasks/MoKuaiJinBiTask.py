@@ -38,7 +38,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎']
+            'options': ['罗贝拉格/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎', '玛格玛（前台无遮挡）']  # 新增玛格玛
         }
         self._source_key = self._get_source_key()
         self.boss_image_map = {
@@ -47,7 +47,8 @@ class MoKuaiJinBiTask(BaseQRSLTask):
             '幻蝎': 'huanxie',
             '急冻机甲': 'CryoLobster',
             '巴巴罗萨': 'Barbarossa',
-            '露琪亚': 'Sweetie',          # 新增露琪亚，识别图片 Sweetie
+            '露琪亚': 'Sweetie',
+            '玛格玛': None,   # 玛格玛不使用图片识别，走特殊逻辑
         }
         self.last_shenlin_time = 0
 
@@ -71,17 +72,26 @@ class MoKuaiJinBiTask(BaseQRSLTask):
         return True
 
     def _select_boss_by_config(self):
-        """根据配置选择对应的BOSS（点击图片）"""
+        """根据配置选择对应的BOSS（点击图片或执行特殊操作）"""
         boss_choice = self.config.get('BOSS选择', '罗贝拉格/朱厌')
 
-        # 获取对应的图片名
+        # 特殊处理：玛格玛（移动+滚轮+点击）
+        if boss_choice == '玛格玛':
+            self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
+            x, y = self._get_scaled_coordinates(1730, 935)
+            self.move(x, y)                # 鼠标移动到指定位置
+            self.scroll(x, y, -5)          # 向下滚动一次（负数表示向下）
+            self.sleep(0.5)                # 延迟500ms
+            self._click_safe(x, y, after_sleep=1)  # 再次点击，并等待1秒稳定
+            return True
+
+        # 普通BOSS：通过图片识别
         image_name = self.boss_image_map.get(boss_choice)
         if image_name is None:
             # 罗贝拉格/朱厌 无需额外操作
             self.log_info(f"BOSS选择为 [{boss_choice}]，无需额外操作")
             return True
 
-        # 其他 BOSS 使用图片识别并点击
         self.log_info(f"BOSS选择为 [{boss_choice}]，等待图片 [{image_name}]")
         return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1)
 
@@ -666,7 +676,7 @@ class MoKuaiJinBiTask(BaseQRSLTask):
     def run(self):
         """任务主循环"""
         try:
-            self.log_info("===== 模块金币任务启动 =====", notify=True)
+
             wait_timeout = self.config.get('等待超时', 900)
             max_loops = self.config.get('循环次数', 10000)
             loop_count = 0
