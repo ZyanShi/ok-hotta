@@ -83,7 +83,7 @@ config = {
     'onetime_tasks': [
         ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
         ["src.tasks.TaoFaZuoZhanTask", "TaoFaZuoZhanTask"],
-        ["src.tasks.MoKuaiJinBiTask", "MoKuaiJinBiTask"],
+        ["src.tasks.WorldBoss", "WorldBossTask"],
         ["src.tasks.FishingTask", "FishingTask"],
         ["src.tasks.ZhongFengTuPoTask", "ZhongFengTuPoTask"],
         ["src.tasks.JieXianMaoDianTask", "JieXianMaoDianTask"],
