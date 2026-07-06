@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+# 关键：显式授予 GITHUB_TOKEN 写入 Release 的权限
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -13,7 +17,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: [ 3.12 ]
+        python-version: [3.12]
 
     steps:
       - name: Configure git
@@ -26,15 +30,18 @@ jobs:
           echo "action_state=yellow" >> $env:GITHUB_ENV
           echo "${{ env.action_state }}"
 
+      # checkout 保持 v4（已兼容 Node.js 24）
       - uses: actions/checkout@v4
         with:
           lfs: true
 
+      # 升级到 v5 解决 Node.js 20 弃用警告
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          
+
+      # 删除重复的 UTF-8 设置（已在 env 中定义），但保留无妨
       - name: Set UTF-8 encoding
         run: |
           set PYTHONIOENCODING=utf-8
@@ -49,35 +56,27 @@ jobs:
         run: |
           python -m ok.update.inline_ok_requirements --tag ${{ github.ref_name }}
 
+      # 改进测试：使用 discover 并指定 tests 目录，更健壮
       - name: Run tests
         run: |
-          Get-ChildItem -Path ".\tests\*.py" | ForEach-Object {
-              Write-Host "Running tests in $($_.FullName)"
-              python -m unittest $_.FullName
-          }
+          python -m unittest discover -s tests
 
-      # 删除或注释掉同步步骤，因为你不需要同步到原作者的仓库
+      # 如果需要，可以保留同步步骤，但注释掉（您已删除）
       # - name: Sync Repositories
-      #   id: sync
       #   uses: ok-oldking/partial-sync-repo@master
-      #   with:
-      #     repos: |
-      #       https://ok-oldking:${{ secrets.OK_GH }}@github.com/ok-oldking/ok-boilerplate-update.git
-      #     sync_list: 'deploy.txt'
-      #     tag: ${{ github.ref_name }}
-      #     gitignore_file: '.update_repo_gitignore'
-      #     show_author: true
+      #   ...
 
+      # pyappify-action 暂未更新，保留 master（但警告会持续，可考虑固定 commit）
       - name: Build with PyAppify Action
         id: build-app
         uses: ok-oldking/pyappify-action@master
 
+      # Release 使用 v2（已支持 Node.js 24）
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: false
-          # 修改 body，不使用 sync 步骤的输出
           body: |
             ### 版本 ${{ github.ref_name }}
             自动构建的 Release
