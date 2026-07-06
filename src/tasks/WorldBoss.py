@@ -465,7 +465,8 @@ class WorldBossTask(BaseQRSLTask):
             self.sleep(0.5)
 
         if not nanyin_box:
-            self.log_warning("南音传送：未找到 nanyintp，点击屏幕中心后继续后续步骤")
+            # 修改为 log_info（原 log_warning 不存在）
+            self.log_info("南音传送：未找到 nanyintp，点击屏幕中心后继续后续步骤")
             self.click(0.5, 0.5)  # 点击屏幕中心
             self.sleep(1)
             # 继续执行后续步骤，不返回 None
