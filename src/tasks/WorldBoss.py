@@ -26,7 +26,7 @@ class WorldBossTask(BaseQRSLTask):
                 "建议修改自动战斗索敌范围，文件在C:\\Users\\你的用户名\\AppData（文件夹上方查看，点击隐藏的项目）"
                 "\\Local\\Hotta\\Saved\\Config\\WindowsNoEditor，找到GameUserSettings.ini文件，"
                 "推荐将AutoCombatSearchRange的值设置为3000。"
-                "南音传送需要将锚点锁定，锁定图标不得与人物图标重叠，不然使用其它搜索模式。"
+                "南音传送需要将锚点锁定"
             ),
         })
         self.config_description = {
@@ -37,10 +37,12 @@ class WorldBossTask(BaseQRSLTask):
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
+        # ========== 修改点1：将 '幻蝎/地驭' 改为 '幻蝎&地驭' ==========
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/伦迪尔/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎']
+            'options': ['罗贝拉格/伦迪尔/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎', '地驭', '幻蝎&地驭']
         }
+        # =============================================================
         self._source_key = self._get_source_key()
         self.boss_image_map = {
             '罗贝拉格/伦迪尔/朱厌': None,
@@ -49,6 +51,7 @@ class WorldBossTask(BaseQRSLTask):
             '急冻机甲': 'CryoLobster',
             '巴巴罗萨': 'Barbarossa',
             '露琪亚': 'Sweetie',
+            '地驭': 'diyu',
         }
         self.last_shenlin_time = 0
 
@@ -71,14 +74,15 @@ class WorldBossTask(BaseQRSLTask):
         self._click_safe(click_x, click_y, after_sleep=2)
         return True
 
-    def _select_boss_by_config(self):
+    def _select_boss_by_config(self, boss_choice=None):
         """根据配置选择对应的BOSS（点击图片或执行特殊操作）"""
-        boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
+        if boss_choice is None:
+            boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
 
         # 普通BOSS：通过图片识别
         image_name = self.boss_image_map.get(boss_choice)
         if image_name is None:
-            # 罗贝拉格/伦迪尔/朱厌 无需额外操作
+            # 罗贝拉格/伦迪尔/朱厌 或组合（但组合不会传到此，因为我们会提前处理）
             self.log_info(f"BOSS选择为 [{boss_choice}]，无需额外操作")
             return True
 
@@ -465,11 +469,9 @@ class WorldBossTask(BaseQRSLTask):
             self.sleep(0.5)
 
         if not nanyin_box:
-            # 修改为 log_info（原 log_warning 不存在）
             self.log_info("南音传送：未找到 nanyintp，点击屏幕中心后继续后续步骤")
             self.click(0.5, 0.5)  # 点击屏幕中心
             self.sleep(1)
-            # 继续执行后续步骤，不返回 None
         else:
             self._click_box_safe(nanyin_box, after_sleep=1)
 
@@ -757,10 +759,25 @@ class WorldBossTask(BaseQRSLTask):
                     self.sleep(5)
                     continue
 
-                if not self._select_boss_by_config():
-                    self.log_error("BOSS选择图片等待超时，跳过本次循环")
-                    self.sleep(5)
-                    continue
+                # ========== 修改点2：将 '幻蝎/地驭' 改为 '幻蝎&地驭' ==========
+                boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
+                if boss_choice == '幻蝎&地驭':
+                    # 根据循环次数奇偶交替，第一次奇数选'幻蝎'，第二次偶数选'地驭'
+                    if loop_count % 2 == 1:
+                        current_boss = '幻蝎'
+                    else:
+                        current_boss = '地驭'
+                    self.log_info(f"组合模式，本次选择 [{current_boss}]")
+                    if not self._select_boss_by_config(boss_choice=current_boss):
+                        self.log_error(f"BOSS [{current_boss}] 选择失败，跳过本次循环")
+                        self.sleep(5)
+                        continue
+                else:
+                    if not self._select_boss_by_config():
+                        self.log_error("BOSS选择图片等待超时，跳过本次循环")
+                        self.sleep(5)
+                        continue
+                # ==============================================================
 
                 if not self._wait_and_click_feature('gotoboss', timeout=30, after_sleep=0):
                     self.sleep(5)
