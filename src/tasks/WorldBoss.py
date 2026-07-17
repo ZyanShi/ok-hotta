@@ -37,12 +37,12 @@ class WorldBossTask(BaseQRSLTask):
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
-        # ========== 修改点1：将 '幻蝎/地驭' 改为 '幻蝎&地驭' ==========
+        # ===== 修改点1：在BOSS下拉选项中增加 '玛格玛（前台无遮挡）' =====
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/伦迪尔/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎', '地驭', '幻蝎&地驭']
+            'options': ['罗贝拉格/伦迪尔/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎', '地驭', '幻蝎&地驭', '玛格玛（前台无遮挡）']
         }
-        # =============================================================
+        # ===== 修改结束 =====
         self._source_key = self._get_source_key()
         self.boss_image_map = {
             '罗贝拉格/伦迪尔/朱厌': None,
@@ -78,6 +78,17 @@ class WorldBossTask(BaseQRSLTask):
         """根据配置选择对应的BOSS（点击图片或执行特殊操作）"""
         if boss_choice is None:
             boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
+
+        # ===== 修改点2：增加对玛格玛的特殊处理 =====
+        if boss_choice == '玛格玛（前台无遮挡）':
+            self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
+            x, y = self._get_scaled_coordinates(1730, 935)
+            self.move(x, y)                # 鼠标移动到指定位置
+            self.scroll(x, y, -5)          # 向下滚动一次（负数表示向下）
+            self.sleep(0.5)                # 延迟500ms
+            self._click_safe(x, y, after_sleep=1)  # 点击，并等待1秒稳定
+            return True
+        # ===== 修改结束 =====
 
         # 普通BOSS：通过图片识别
         image_name = self.boss_image_map.get(boss_choice)
@@ -442,8 +453,13 @@ class WorldBossTask(BaseQRSLTask):
         self.log_info("米字移动序列结束，未找到宝箱")
         return None
 
+    # ==================== 南音传送修改（核心改动） ====================
     def _nanyin_teleport_search(self):
-        """南音传送搜索：使用地图传送直接到达宝箱位置"""
+        """
+        南音传送搜索：直接通过地图传送到达宝箱附近，并等待目标文字（太极匣/高级密码箱）出现，
+        若出现则立即拾取和领取奖励。
+        返回 True 表示成功完成，False 表示失败。
+        """
         self.log_info("启动南音传送搜索")
 
         # 1. 按M打开地图
@@ -482,30 +498,71 @@ class WorldBossTask(BaseQRSLTask):
         ocr_results = self.wait_ocr(box=ocr_box, match="虚空渊流", time_out=10, raise_if_not_found=False)
         if not ocr_results:
             self.log_error("南音传送：未找到虚空渊流")
-            return None
+            return False
         self._click_box_safe(ocr_results[0], after_sleep=1)
 
         # 4. 等待并点击 tp 图片（超时10秒）
         if not self._wait_and_click_feature('tp', timeout=10, after_sleep=1):
             self.log_error("南音传送：未找到 tp 图片")
-            return None
+            return False
 
         # 5. 等待并点击 sure 图片（超时10秒，点击后等待8秒加载）
         if not self._wait_and_click_feature('sure', timeout=10, after_sleep=8):
             self.log_error("南音传送：未找到 sure 图片")
-            return None
+            return False
 
-        # 6. 传送完成，等待宝箱出现（超时30秒）
-        chest = self.wait_any_chest(time_out=30)
-        if not chest:
-            self.log_error("南音传送：传送后未找到宝箱")
-        return chest
+        # ========== 修改：不再等待宝箱图片，直接等待目标文字 ==========
+        # 6. 直接等待目标文字出现（超时60秒）
+        if not self._wait_for_target_text(timeout=60):
+            self.log_error("南音传送：超时未检测到目标文字")
+            return False
+
+        # 7. 进入拾取流程（传入None，让_phase_chest_pickup自行获取宝箱）
+        if not self._phase_chest_pickup(chest_box=None):
+            self.log_error("南音传送：宝箱拾取失败")
+            return False
+
+        # 8. 领取奖励
+        if not self._claim_reward():
+            self.log_error("南音传送：奖励领取失败")
+            return False
+
+        self.log_info("南音传送搜索成功完成")
+        return True
+
+    # ========== 新增方法：等待目标文字 ==========
+    def _wait_for_target_text(self, timeout=60):
+        """
+        持续在固定区域进行OCR，检测是否出现 "太极匣" 或 "高级密码箱"。
+        返回 True 表示检测到，False 表示超时。
+        """
+        self.log_info(f"等待目标文字出现，超时{timeout}秒")
+        x1, y1 = self._get_scaled_coordinates(1110, 520)
+        x2, y2 = self._get_scaled_coordinates(1280, 575)
+        ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                ocr_results = self.ocr(box=ocr_box, target_height=540)
+                if ocr_results:
+                    for box in ocr_results:
+                        text = box.name.strip()
+                        if ('太极匣' in text) or ('高级密码箱' in text):
+                            self.log_info(f"检测到目标文字: {text}")
+                            return True
+            except Exception as e:
+                self.log_debug(f"OCR检测异常: {e}")
+            self.sleep(0.5)
+        return False
+
+    # ===========================================================
 
     def cross_search(self):
-        """根据配置选择搜索方式"""
+        """根据配置选择搜索方式（南音传送已独立，不再通过此方法调用）"""
         mode = self.config.get('搜索模式', '十字搜索')
         if mode == '南音传送':
-            return self._nanyin_teleport_search()
+            return self._nanyin_teleport_search()  # 已改为返回 bool
         elif mode == '十字搜索':
             return self._cross_search()
         else:  # 米字搜索
@@ -648,9 +705,21 @@ class WorldBossTask(BaseQRSLTask):
             self.log_info("approach_bosschest 被用户手动停止")
             raise
 
+    # ========== 修改 _phase_chest_pickup 支持 chest_box=None ==========
     def _phase_chest_pickup(self, chest_box=None):
-        """拾取宝箱阶段"""
+        """
+        拾取宝箱阶段。
+        如果 chest_box 为 None，则尝试自行获取宝箱（等待10秒）。
+        """
         self.log_info("进入宝箱拾取阶段")
+
+        # 如果没有传入宝箱，自行尝试获取
+        if chest_box is None:
+            self.log_info("未传入宝箱，尝试自动获取")
+            chest_box = self.wait_any_chest(time_out=10)
+            if chest_box is None:
+                self.log_error("无法获取宝箱")
+                return False
 
         max_retries = 3
         for retry in range(max_retries):
@@ -721,6 +790,7 @@ class WorldBossTask(BaseQRSLTask):
 
         self.log_error("拾取超时：10秒内未出现openchest图片")
         return False
+    # ===========================================================
 
     def _claim_reward(self):
         """领取奖励"""
@@ -759,7 +829,6 @@ class WorldBossTask(BaseQRSLTask):
                     self.sleep(5)
                     continue
 
-                # ========== 修改点2：将 '幻蝎/地驭' 改为 '幻蝎&地驭' ==========
                 boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
                 if boss_choice == '幻蝎&地驭':
                     # 根据循环次数奇偶交替，第一次奇数选'幻蝎'，第二次偶数选'地驭'
@@ -777,7 +846,6 @@ class WorldBossTask(BaseQRSLTask):
                         self.log_error("BOSS选择图片等待超时，跳过本次循环")
                         self.sleep(5)
                         continue
-                # ==============================================================
 
                 if not self._wait_and_click_feature('gotoboss', timeout=30, after_sleep=0):
                     self.sleep(5)
@@ -822,29 +890,38 @@ class WorldBossTask(BaseQRSLTask):
                         continue
 
                     self.start_auto_combat()
-                    # 根据搜索模式决定是否先尝试自然寻找
+                    # 根据搜索模式决定行为
                     mode = self.config.get('搜索模式', '十字搜索')
                     if mode == '南音传送':
-                        self.log_info("南音传送模式，直接进行传送搜索")
-                        chest = self.cross_search()  # 内部执行南音传送
+                        # 南音传送直接处理整个拾取和奖励流程，返回成功/失败
+                        success = self._nanyin_teleport_search()
+                        if not success:
+                            self.log_error("南音传送流程失败，跳过本次循环")
+                            self.sleep(5)
+                            continue
+                        # 成功则直接结束本次循环（因为内部已完成拾取和奖励）
+                        elapsed = time.time() - loop_start_time
+                        self.log_info(f"本次循环总耗时 {elapsed:.1f}秒")
+                        continue
                     else:
+                        # 非南音传送：先尝试自然寻找
                         chest = self.wait_any_chest(time_out=5)
                         if not chest:
                             self.log_info("5秒内未找到宝箱，启动搜索")
-                            chest = self.cross_search()
-                    if not chest:
-                        self.log_error("无法找到宝箱，跳过本次循环")
-                        self.sleep(5)
-                        continue
+                            chest = self.cross_search()  # 返回 Box 或 None
+                        if not chest:
+                            self.log_error("无法找到宝箱，跳过本次循环")
+                            self.sleep(5)
+                            continue
 
-                    if not self._phase_chest_pickup(chest):
-                        self.log_error("宝箱拾取失败，跳过奖励领取")
-                        self.sleep(5)
-                        continue
+                        if not self._phase_chest_pickup(chest):
+                            self.log_error("宝箱拾取失败，跳过奖励领取")
+                            self.sleep(5)
+                            continue
 
-                    if not self._claim_reward():
-                        self.log_error("奖励领取失败")
-                        self.sleep(5)
+                        if not self._claim_reward():
+                            self.log_error("奖励领取失败")
+                            self.sleep(5)
 
                 elif monitor_result == 'timeout':
                     self.log_error("BOSS刷新监测超时，跳过本次循环")
