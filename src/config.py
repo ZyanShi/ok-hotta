@@ -7,7 +7,7 @@ version = "dev"
 # 游戏按键配置（包含源器键和技能键）
 key_config_option = ConfigOption('游戏按键配置', {
     '源器键': 'x',
-    '技能键': 'e',      # 新增：普通技能键，用于自动技能触发器
+
 }, description='游戏技能按键')
 
 def make_bottom_right_black(frame):
@@ -84,13 +84,14 @@ config = {
         ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
         ["src.tasks.TaoFaZuoZhanTask", "TaoFaZuoZhanTask"],
         ["src.tasks.WorldBoss", "WorldBossTask"],
+        ["src.tasks.AutoCombatTask", "AutoCombatTask"],
         ["src.tasks.FishingTask", "FishingTask"],
         ["src.tasks.ZhongFengTuPoTask", "ZhongFengTuPoTask"],
         ["src.tasks.JieXianMaoDianTask", "JieXianMaoDianTask"],
         ["ok", "DiagnosisTask"],
     ],
     'trigger_tasks': [
-        ["src.tasks.AutoSkillTask", "AutoSkillTask"],
+        ["src.tasks.AutoKeypressTask", "AutoKeypressTask"],
     ],
     'custom_tabs': [
         # ['src.ui.MyTab', 'MyTab'],
