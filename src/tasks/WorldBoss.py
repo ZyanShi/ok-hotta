@@ -37,10 +37,21 @@ class WorldBossTask(BaseQRSLTask):
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
-        # ===== 修改点1：在BOSS下拉选项中增加 '玛格玛（前台无遮挡）' =====
+        # ===== 修改点1：在BOSS下拉选项中增加 '玛格玛（前台无遮挡）' 和 '英招&地驭（格网启动）' =====
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
-            'options': ['罗贝拉格/伦迪尔/朱厌', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨', '幻蝎', '地驭', '幻蝎&地驭', '玛格玛（前台无遮挡）']
+            'options': [
+                '罗贝拉格/伦迪尔/朱厌',
+                '阿波菲斯',
+                '急冻机甲',
+                '露琪亚',
+                '巴巴罗萨',
+                '幻蝎',
+                '地驭',
+                '幻蝎&地驭',
+                '玛格玛（前台无遮挡）',
+                '英招&地驭（格网启动）'   # 新增
+            ]
         }
         # ===== 修改结束 =====
         self._source_key = self._get_source_key()
@@ -74,43 +85,65 @@ class WorldBossTask(BaseQRSLTask):
         self._click_safe(click_x, click_y, after_sleep=2)
         return True
 
-    def _select_boss_by_config(self, boss_choice=None):
+    # ===== 修改点2：_wait_and_click_feature 增加 box 参数，默认 None =====
+    def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0, box=None):
+        """等待特征图片出现并点击，支持自定义搜索区域 box"""
+        found_box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False, box=box)
+        if found_box:
+            self.log_info(f"找到并点击 [{feature_name}]")
+            self._click_box_safe(found_box)
+            if after_sleep > 0:
+                self.sleep(after_sleep)
+            return True
+        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
+        return False
+
+    # ===== 修改点3：_select_boss_by_config 增加 loop_count 参数，支持英招&地驭 =====
+    def _select_boss_by_config(self, boss_choice=None, loop_count=None):
         """根据配置选择对应的BOSS（点击图片或执行特殊操作）"""
         if boss_choice is None:
             boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
 
-        # ===== 修改点2：增加对玛格玛的特殊处理 =====
+        # 英招&地驭（格网启动）特殊处理：轮流点击固定坐标
+        if boss_choice == '英招&地驭（格网启动）':
+            # 根据循环次数决定点击哪个坐标
+            if loop_count is None:
+                loop_count = 1  # 默认第一次
+            if loop_count % 2 == 1:
+                x, y = self._get_scaled_coordinates(835, 930)
+                self.log_info(f"英招&地驭：奇数循环，点击坐标 ({x}, {y})")
+            else:
+                x, y = self._get_scaled_coordinates(1810, 925)
+                self.log_info(f"英招&地驭：偶数循环，点击坐标 ({x}, {y})")
+            self._click_safe(x, y, after_sleep=1)
+            return True
+
+        # 玛格玛特殊处理
         if boss_choice == '玛格玛（前台无遮挡）':
             self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
             x, y = self._get_scaled_coordinates(1730, 935)
-            self.move(x, y)                # 鼠标移动到指定位置
-            self.scroll(x, y, -5)          # 向下滚动一次（负数表示向下）
-            self.sleep(0.5)                # 延迟500ms
-            self._click_safe(x, y, after_sleep=1)  # 点击，并等待1秒稳定
+            self.move(x, y)
+            self.scroll(x, y, -5)
+            self.sleep(0.5)
+            self._click_safe(x, y, after_sleep=1)
             return True
-        # ===== 修改结束 =====
 
-        # 普通BOSS：通过图片识别
+        # 普通BOSS：通过图片识别，使用全屏搜索
         image_name = self.boss_image_map.get(boss_choice)
         if image_name is None:
             # 罗贝拉格/伦迪尔/朱厌 或组合（但组合不会传到此，因为我们会提前处理）
             self.log_info(f"BOSS选择为 [{boss_choice}]，无需额外操作")
             return True
 
-        self.log_info(f"BOSS选择为 [{boss_choice}]，等待图片 [{image_name}]")
-        return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1)
-
-    def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0):
-        """等待特征图片出现并点击"""
-        box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False)
-        if box:
-            self.log_info(f"找到并点击 [{feature_name}]")
-            self._click_box_safe(box)
-            if after_sleep > 0:
-                self.sleep(after_sleep)
-            return True
-        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
-        return False
+        self.log_info(f"BOSS选择为 [{boss_choice}]，等待图片 [{image_name}]（全屏搜索）")
+        # 核心改动：构建全屏框，传入 _wait_and_click_feature
+        frame = self.frame
+        if frame is None:
+            self.log_error("无法获取屏幕帧")
+            return False
+        h, w = frame.shape[:2]
+        full_box = Box(0, 0, w, h)                     # 全屏区域
+        return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
 
     def _wait_main_page_and_activate(self):
         """等待返回主页面并激活自动战斗"""
@@ -166,14 +199,18 @@ class WorldBossTask(BaseQRSLTask):
         if frame is None:
             return False
         x1, y1 = self._get_scaled_coordinates(1216, 157)
-        x2, y2 = self._get_scaled_coordinates(22, 410)
+        # 旧坐标2 (22, 410) 已注释，替换为新坐标 (758, 975)
+        # x2, y2 = self._get_scaled_coordinates(22, 410)
+        x2, y2 = self._get_scaled_coordinates(758, 975)
         h, w = frame.shape[:2]
         if y1 >= h or x1 >= w or y2 >= h or x2 >= w:
             return False
         pixel1 = frame[y1, x1]
         pixel2 = frame[y2, x2]
+        # 坐标1颜色保持不变 (161, 209, 47)
         color1_match = (pixel1[0] == 161 and pixel1[1] == 209 and pixel1[2] == 47)
-        color2_match = (pixel2[0] == 237 and pixel2[1] == 166 and pixel2[2] == 62)
+        # 坐标2颜色改为白色 (255, 255, 255)
+        color2_match = (pixel2[0] == 255 and pixel2[1] == 255 and pixel2[2] == 255)
         return color1_match and color2_match
 
     def _phase_b_wait_boss_ui_disappear(self, timeout=600):
@@ -186,14 +223,18 @@ class WorldBossTask(BaseQRSLTask):
                 self.sleep(0.5)
                 continue
             x1, y1 = self._get_scaled_coordinates(1216, 157)
-            x2, y2 = self._get_scaled_coordinates(22, 410)
+            # 旧坐标2 (22, 410) 已注释，替换为新坐标 (758, 975)
+            # x2, y2 = self._get_scaled_coordinates(22, 410)
+            x2, y2 = self._get_scaled_coordinates(758, 975)
             h, w = frame.shape[:2]
             if y1 < h and x1 < w and y2 < h and x2 < w:
                 pixel1 = frame[y1, x1]
                 pixel2 = frame[y2, x2]
 
+                # 坐标1存在色 (161, 209, 47)
                 spawned1 = (pixel1[0] == 161 and pixel1[1] == 209 and pixel1[2] == 47)
-                spawned2 = (pixel2[0] == 237 and pixel2[1] == 166 and pixel2[2] == 62)
+                # 坐标2存在色改为白色 (255, 255, 255)
+                spawned2 = (pixel2[0] == 255 and pixel2[1] == 255 and pixel2[2] == 255)
 
                 if not (spawned1 or spawned2):
                     self.log_info("检测到两个点均不匹配存在色，首领提示已消失")
@@ -830,6 +871,7 @@ class WorldBossTask(BaseQRSLTask):
                     continue
 
                 boss_choice = self.config.get('BOSS选择', '罗贝拉格/伦迪尔/朱厌')
+                # ===== 修改点4：增加对“英招&地驭（格网启动）”的处理 =====
                 if boss_choice == '幻蝎&地驭':
                     # 根据循环次数奇偶交替，第一次奇数选'幻蝎'，第二次偶数选'地驭'
                     if loop_count % 2 == 1:
@@ -839,6 +881,12 @@ class WorldBossTask(BaseQRSLTask):
                     self.log_info(f"组合模式，本次选择 [{current_boss}]")
                     if not self._select_boss_by_config(boss_choice=current_boss):
                         self.log_error(f"BOSS [{current_boss}] 选择失败，跳过本次循环")
+                        self.sleep(5)
+                        continue
+                elif boss_choice == '英招&地驭（格网启动）':
+                    # 新组合：直接调用 _select_boss_by_config，传入 loop_count
+                    if not self._select_boss_by_config(boss_choice, loop_count=loop_count):
+                        self.log_error("英招&地驭选择失败，跳过本次循环")
                         self.sleep(5)
                         continue
                 else:
