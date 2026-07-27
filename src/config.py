@@ -6,7 +6,9 @@ version = "dev"
 
 # 游戏按键配置（包含源器键和技能键）
 key_config_option = ConfigOption('游戏按键配置', {
-    '源器键': 'x',
+    '源器键1': 'x',
+    '源器键2': 'c',
+
 
 }, description='游戏技能按键')
 
