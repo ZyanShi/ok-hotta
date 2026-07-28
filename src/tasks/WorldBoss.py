@@ -364,6 +364,24 @@ class WorldBossTask(BaseQRSLTask):
 
         self.log_info("BOSS状态监测线程结束")
 
+    # ========== 新增缺失的方法：用于自动战斗模式 ==========
+    def _monitor_boss_spawn_only(self, timeout):
+        """
+        仅监测BOSS是否刷新（用于自动战斗模式）
+        :param timeout: 超时时间（秒）
+        :return: 'boss_found' 如果刷新，'timeout' 如果超时
+        """
+        self.log_info(f"等待BOSS刷新，超时{timeout}秒...")
+        start = time.time()
+        while time.time() - start < timeout:
+            if self._is_boss_spawned():
+                self.log_info("检测到BOSS刷新！")
+                return 'boss_found'
+            self.sleep(0.2)
+        self.log_info(f"BOSS刷新超时（{timeout}秒）")
+        return 'timeout'
+    # =====================================================
+
     # -------- 原有方法保持不变 --------
     def wait_any_chest(self, time_out=30):
         self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.7")
