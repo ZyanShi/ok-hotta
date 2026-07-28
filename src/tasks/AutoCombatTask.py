@@ -94,6 +94,7 @@ class AutoCombatTask(BaseQRSLTask):
             self.sleep(0.5)
             if self._is_digit_present():
                 self.log_info("小小飓风检测到数字，跳出循环")
+                self.sleep(0.7)
                 break
         else:
             self.log_warning("小小飓风未检测到数字，已达最大尝试次数")
