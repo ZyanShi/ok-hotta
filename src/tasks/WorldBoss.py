@@ -45,7 +45,6 @@ class WorldBossTask(BaseQRSLTask):
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
-        # 修改这里：增加 '雅诺（前台）'
         self.config_type['战斗方式'] = {'type': "drop_down", 'options': ['自动战斗', '孟章（前台）', '雅诺（前台）']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
@@ -60,7 +59,9 @@ class WorldBossTask(BaseQRSLTask):
                 '地驭',
                 '幻蝎&地驭',
                 '玛格玛（前台无遮挡）',
-                '英招&地驭（格网启动）'
+                '英招&地驭',
+                '英招',
+                '皇后虫',
             ]
         }
 
@@ -74,6 +75,8 @@ class WorldBossTask(BaseQRSLTask):
             '露琪亚': 'Sweetie',
             '地驭': 'diyu',
             '伦迪尔': 'Lundir',
+            '英招': 'yingzhao',
+            '皇后虫': 'huanghouchong',
         }
         self.last_shenlin_time = 0
 
@@ -120,17 +123,24 @@ class WorldBossTask(BaseQRSLTask):
         if boss_choice is None:
             boss_choice = self.config.get('BOSS选择', '罗贝拉格/朱厌')
 
-        if boss_choice == '英招&地驭（格网启动）':
+        # 获取全屏 Box 以便后续使用
+        frame = self.frame
+        if frame is None:
+            self.log_error("无法获取屏幕帧")
+            return False
+        h, w = frame.shape[:2]
+        full_box = Box(0, 0, w, h)
+
+        if boss_choice == '英招&地驭':
             if loop_count is None:
                 loop_count = 1
             if loop_count % 2 == 1:
-                x, y = self._get_scaled_coordinates(835, 930)
-                self.log_info(f"英招&地驭：奇数循环，点击坐标 ({x}, {y})")
+                image_name = 'yingzhao'
+                self.log_info(f"英招&地驭：奇数循环，识别并点击 [{image_name}]")
             else:
-                x, y = self._get_scaled_coordinates(1810, 925)
-                self.log_info(f"英招&地驭：偶数循环，点击坐标 ({x}, {y})")
-            self._click_safe(x, y, after_sleep=1)
-            return True
+                image_name = 'diyu'
+                self.log_info(f"英招&地驭：偶数循环，识别并点击 [{image_name}]")
+            return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
 
         if boss_choice == '玛格玛（前台无遮挡）':
             self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
@@ -147,12 +157,6 @@ class WorldBossTask(BaseQRSLTask):
             return True
 
         self.log_info(f"BOSS选择为 [{boss_choice}]，等待图片 [{image_name}]（全屏搜索）")
-        frame = self.frame
-        if frame is None:
-            self.log_error("无法获取屏幕帧")
-            return False
-        h, w = frame.shape[:2]
-        full_box = Box(0, 0, w, h)
         return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
 
     def _wait_main_page_and_activate(self):
@@ -335,10 +339,10 @@ class WorldBossTask(BaseQRSLTask):
 
         self.log_info("孟章操作循环结束")
 
-    # ==================== 雅诺操作循环（新增） ====================
+    # ==================== 雅诺操作循环（修改：增加按`键） ====================
     def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead):
         """
-        雅诺操作循环：左键单击一次 → 长按左键直到BOSS死亡或超时
+        雅诺操作循环：左键单击一次 → 长按左键2秒后按一次 ` 键，继续长按直到BOSS死亡或超时
         """
         frame = self.frame
         if frame is None:
@@ -357,11 +361,19 @@ class WorldBossTask(BaseQRSLTask):
             self.mouse_up(key='left')
             self.sleep(0.1)
 
-            # 2. 长按左键，直到收到停止信号或BOSS死亡
-            self.log_info("雅诺：长按左键开始（将持续至BOSS死亡或超时）")
+            # 2. 长按左键，持续按住
+            self.log_info("雅诺：长按左键开始")
             self.mouse_down(center_x, center_y, key='left')
+
+            # 长按2秒后按一次 ` 键（左键不松开）
+            self.log_info("雅诺：长按左键2秒后，按下 ` 键")
+            self.sleep(2)
+            self.send_key('`')          # 键盘上的反引号键，通常在 ESC 下方
+
+            # 继续长按，直到收到停止信号或BOSS死亡
+            self.log_info("雅诺：继续长按左键，等待BOSS死亡或停止信号")
             while not stop_event.is_set() and not boss_dead.is_set():
-                self.sleep(0.1)  # 频繁检查，保持响应
+                self.sleep(0.1)
             self.log_info("雅诺：释放左键")
             self.mouse_up(key='left')
 
@@ -380,16 +392,16 @@ class WorldBossTask(BaseQRSLTask):
         finally:
             self.log_info("雅诺操作线程结束")
 
-    # ==================== 监控线程 ====================
+    # ==================== 监控线程（通用，日志去“孟章”化） ====================
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
-        """监测BOSS刷新（双绿点+白点）和死亡（三点消失）"""
+        """监测BOSS刷新（双绿点+白点）和死亡（三点消失），通用监控"""
         start_time = time.time()
         boss_spawned_occurred = False
 
         while not stop_event.is_set() and not boss_dead.is_set():
             # 检查是否超时（未刷新）
             if not boss_spawned_occurred and (time.time() - start_time > timeout):
-                self.log_info(f"孟章监测超时（{timeout}秒），未检测到BOSS刷新")
+                self.log_info(f"BOSS监测超时（{timeout}秒），未检测到BOSS刷新，终止")
                 stop_event.set()
                 break
 
@@ -397,7 +409,7 @@ class WorldBossTask(BaseQRSLTask):
                 if self._is_boss_spawned():
                     boss_spawned_occurred = True
                     boss_spawned.set()
-                    self.log_info("孟章监测到BOSS刷新！")
+                    self.log_info("监测到BOSS刷新！")
                 else:
                     self.sleep(0.2)
                     continue
@@ -405,7 +417,7 @@ class WorldBossTask(BaseQRSLTask):
                 # 已刷新，检测死亡
                 if self._check_boss_ui_disappeared():
                     boss_dead.set()
-                    self.log_info("孟章监测到BOSS死亡！")
+                    self.log_info("监测到BOSS死亡！")
                     break
                 self.sleep(0.2)
 
@@ -1040,7 +1052,7 @@ class WorldBossTask(BaseQRSLTask):
                         self.log_error(f"BOSS [{current_boss}] 选择失败，跳过本次循环")
                         self.sleep(5)
                         continue
-                elif boss_choice == '英招&地驭（格网启动）':
+                elif boss_choice == '英招&地驭':
                     if not self._select_boss_by_config(boss_choice, loop_count=loop_count):
                         self.log_error("英招&地驭选择失败，跳过本次循环")
                         self.sleep(5)
@@ -1138,12 +1150,15 @@ class WorldBossTask(BaseQRSLTask):
                     self.log_info("监控线程已启动，两者并行运行")
 
                     start_monitor = time.time()
-                    while not boss_dead.is_set():
+                    while not boss_dead.is_set() and not stop_event.is_set():
                         if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
                             self.log_info(f"孟章监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
                             stop_event.set()
                             break
                         self.sleep(0.2)
+
+                    if stop_event.is_set():
+                        self.log_info("孟章等待循环因停止信号退出")
 
                     stop_event.set()
                     t_combat.join(timeout=2)
@@ -1181,7 +1196,7 @@ class WorldBossTask(BaseQRSLTask):
                                 self.log_error("奖励领取失败")
                                 self.sleep(5)
 
-                # ========== 新增雅诺分支 ==========
+                # ========== 雅诺分支（已修改） ==========
                 elif combat_mode == '雅诺（前台）':
                     self.log_info("启动雅诺双线程模式")
                     stop_event = threading.Event()
@@ -1206,12 +1221,15 @@ class WorldBossTask(BaseQRSLTask):
                     self.log_info("监控线程已启动，两者并行运行")
 
                     start_monitor = time.time()
-                    while not boss_dead.is_set():
+                    while not boss_dead.is_set() and not stop_event.is_set():
                         if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
                             self.log_info(f"雅诺监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
                             stop_event.set()
                             break
                         self.sleep(0.2)
+
+                    if stop_event.is_set():
+                        self.log_info("雅诺等待循环因停止信号退出")
 
                     stop_event.set()
                     t_combat.join(timeout=2)
