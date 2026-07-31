@@ -339,10 +339,11 @@ class WorldBossTask(BaseQRSLTask):
 
         self.log_info("孟章操作循环结束")
 
-    # ==================== 雅诺操作循环（修改：增加按`键） ====================
+    # ==================== 雅诺操作循环（新增定时按下反引号键） ====================
     def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead):
         """
-        雅诺操作循环：左键单击一次 → 长按左键2秒后按一次 ` 键，继续长按直到BOSS死亡或超时
+        雅诺操作循环：左键单击一次 → 长按左键直到BOSS死亡或超时
+        长按开始后2秒时，只发送一次反引号键（`），不松开左键。
         """
         frame = self.frame
         if frame is None:
@@ -361,18 +362,18 @@ class WorldBossTask(BaseQRSLTask):
             self.mouse_up(key='left')
             self.sleep(0.1)
 
-            # 2. 长按左键，持续按住
-            self.log_info("雅诺：长按左键开始")
+            # 2. 长按左键，直到收到停止信号或BOSS死亡
+            self.log_info("雅诺：长按左键开始（将持续至BOSS死亡或超时），2秒后发送一次反引号键")
             self.mouse_down(center_x, center_y, key='left')
-
-            # 长按2秒后按一次 ` 键（左键不松开）
-            self.log_info("雅诺：长按左键2秒后，按下 ` 键")
-            self.sleep(2)
-            self.send_key('`')          # 键盘上的反引号键，通常在 ESC 下方
-
-            # 继续长按，直到收到停止信号或BOSS死亡
-            self.log_info("雅诺：继续长按左键，等待BOSS死亡或停止信号")
+            start_time = time.time()
+            key_sent = False
             while not stop_event.is_set() and not boss_dead.is_set():
+                now = time.time()
+                # 长按2秒后发送一次反引号键（仅一次）
+                if not key_sent and (now - start_time >= 2.0):
+                    self.send_key('`')
+                    self.log_info("雅诺：长按2秒后发送反引号键")
+                    key_sent = True
                 self.sleep(0.1)
             self.log_info("雅诺：释放左键")
             self.mouse_up(key='left')
@@ -392,16 +393,16 @@ class WorldBossTask(BaseQRSLTask):
         finally:
             self.log_info("雅诺操作线程结束")
 
-    # ==================== 监控线程（通用，日志去“孟章”化） ====================
+    # ==================== 监控线程 ====================
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
-        """监测BOSS刷新（双绿点+白点）和死亡（三点消失），通用监控"""
+        """监测BOSS刷新（双绿点+白点）和死亡（三点消失）"""
         start_time = time.time()
         boss_spawned_occurred = False
 
         while not stop_event.is_set() and not boss_dead.is_set():
             # 检查是否超时（未刷新）
             if not boss_spawned_occurred and (time.time() - start_time > timeout):
-                self.log_info(f"BOSS监测超时（{timeout}秒），未检测到BOSS刷新，终止")
+                self.log_info(f"BOSS刷新监测超时（{timeout}秒），未检测到BOSS刷新")
                 stop_event.set()
                 break
 
@@ -1196,7 +1197,7 @@ class WorldBossTask(BaseQRSLTask):
                                 self.log_error("奖励领取失败")
                                 self.sleep(5)
 
-                # ========== 雅诺分支（已修改） ==========
+                # ========== 新增雅诺分支 ==========
                 elif combat_mode == '雅诺（前台）':
                     self.log_info("启动雅诺双线程模式")
                     stop_event = threading.Event()
