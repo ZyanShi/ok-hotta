@@ -37,7 +37,7 @@ class WorldBossTask(BaseQRSLTask):
             'BOSS选择': '选择不同地图BOSS，请提前切换到对应的地图',
             '等待超时': '神临BOSS后未检测到BOSS的等待时间',
             '循环次数': '任务执行的最大循环次数',
-            '战斗方式': '选择战斗模式（自动战斗/孟章前台）',
+            '战斗方式': '选择战斗模式（自动战斗/孟章前台/雅诺前台）',
             '武器键': '选择切换战场武器',
             # '源器2' 描述已移除
             '搜索模式': '选择宝箱搜索方式',
@@ -45,7 +45,8 @@ class WorldBossTask(BaseQRSLTask):
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
-        self.config_type['战斗方式'] = {'type': "drop_down", 'options': ['自动战斗', '孟章（前台）']}
+        # 修改这里：增加 '雅诺（前台）'
+        self.config_type['战斗方式'] = {'type': "drop_down", 'options': ['自动战斗', '孟章（前台）', '雅诺（前台）']}
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
             'options': [
@@ -179,8 +180,8 @@ class WorldBossTask(BaseQRSLTask):
         if combat_mode == '自动战斗':
             self.log_info("开启自动战斗")
             self.start_auto_combat()
-        elif combat_mode == '孟章（前台）':
-            self.log_info("孟章（前台）模式：不开启自动战斗，由自定义逻辑控制")
+        elif combat_mode in ['孟章（前台）', '雅诺（前台）']:
+            self.log_info(f"{combat_mode}模式：不开启自动战斗，由自定义逻辑控制")
         else:
             self.log_info("当前战斗方式未知，跳过开启自动战斗")
         return True
@@ -334,6 +335,52 @@ class WorldBossTask(BaseQRSLTask):
 
         self.log_info("孟章操作循环结束")
 
+    # ==================== 雅诺操作循环（新增） ====================
+    def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead):
+        """
+        雅诺操作循环：左键单击一次 → 长按左键直到BOSS死亡或超时
+        """
+        frame = self.frame
+        if frame is None:
+            self.log_error("雅诺：无法获取屏幕帧")
+            return
+        h, w = frame.shape[:2]
+        center_x = w // 2
+        center_y = h // 2
+        self.log_info(f"雅诺：屏幕中心坐标 ({center_x}, {center_y})")
+
+        try:
+            # 1. 左键单击一次
+            self.log_info("雅诺：左键单击一次")
+            self.mouse_down(center_x, center_y, key='left')
+            self.sleep(0.05)
+            self.mouse_up(key='left')
+            self.sleep(0.1)
+
+            # 2. 长按左键，直到收到停止信号或BOSS死亡
+            self.log_info("雅诺：长按左键开始（将持续至BOSS死亡或超时）")
+            self.mouse_down(center_x, center_y, key='left')
+            while not stop_event.is_set() and not boss_dead.is_set():
+                self.sleep(0.1)  # 频繁检查，保持响应
+            self.log_info("雅诺：释放左键")
+            self.mouse_up(key='left')
+
+        except TaskDisabledException:
+            self.log_info("雅诺操作线程收到禁用信号，退出")
+            try:
+                self.mouse_up(key='left')
+            except:
+                pass
+        except Exception as e:
+            self.log_error(f"雅诺操作循环异常: {e}")
+            try:
+                self.mouse_up(key='left')
+            except:
+                pass
+        finally:
+            self.log_info("雅诺操作线程结束")
+
+    # ==================== 监控线程 ====================
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
         """监测BOSS刷新（双绿点+白点）和死亡（三点消失）"""
         start_time = time.time()
@@ -1108,6 +1155,74 @@ class WorldBossTask(BaseQRSLTask):
                         continue
                     else:
                         self.log_info("孟章检测到BOSS死亡，继续拾取流程")
+                        mode = self.config.get('搜索模式', '十字搜索')
+                        if mode == '南音传送':
+                            success = self._nanyin_teleport_search()
+                            if not success:
+                                self.log_error("南音传送流程失败，跳过本次循环")
+                                self.sleep(5)
+                                continue
+                        else:
+                            chest = self.wait_any_chest(time_out=5)
+                            if not chest:
+                                self.log_info("5秒内未找到宝箱，启动搜索")
+                                chest = self.cross_search()
+                            if not chest:
+                                self.log_error("无法找到宝箱，跳过本次循环")
+                                self.sleep(5)
+                                continue
+
+                            if not self._phase_chest_pickup(chest):
+                                self.log_error("宝箱拾取失败，跳过奖励领取")
+                                self.sleep(5)
+                                continue
+
+                            if not self._claim_reward():
+                                self.log_error("奖励领取失败")
+                                self.sleep(5)
+
+                # ========== 新增雅诺分支 ==========
+                elif combat_mode == '雅诺（前台）':
+                    self.log_info("启动雅诺双线程模式")
+                    stop_event = threading.Event()
+                    boss_spawned = threading.Event()
+                    boss_dead = threading.Event()
+
+                    t_combat = threading.Thread(
+                        target=self._yanuo_combat_loop,
+                        args=(stop_event, boss_spawned, boss_dead),
+                        daemon=True
+                    )
+                    t_combat.start()
+                    self.log_info("操作线程已启动，等待5秒后启动监控线程...")
+                    self.sleep(5)
+
+                    t_monitor = threading.Thread(
+                        target=self._monitor_boss_status,
+                        args=(stop_event, boss_spawned, boss_dead, wait_timeout),
+                        daemon=True
+                    )
+                    t_monitor.start()
+                    self.log_info("监控线程已启动，两者并行运行")
+
+                    start_monitor = time.time()
+                    while not boss_dead.is_set():
+                        if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
+                            self.log_info(f"雅诺监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
+                            stop_event.set()
+                            break
+                        self.sleep(0.2)
+
+                    stop_event.set()
+                    t_combat.join(timeout=2)
+                    t_monitor.join(timeout=2)
+
+                    if not boss_dead.is_set():
+                        self.log_error("雅诺未检测到BOSS死亡，跳过本次循环")
+                        self.sleep(5)
+                        continue
+                    else:
+                        self.log_info("雅诺检测到BOSS死亡，继续拾取流程")
                         mode = self.config.get('搜索模式', '十字搜索')
                         if mode == '南音传送':
                             success = self._nanyin_teleport_search()
