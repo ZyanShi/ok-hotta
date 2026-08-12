@@ -25,6 +25,7 @@ class WorldBossTask(BaseQRSLTask):
             '武器键': '2',
             '搜索模式': '南音传送',
             '传送至海嘉德': False,
+            '传送至洛克哈特': False,
             '提示信息': (
                 "建议修改自动战斗索敌范围，文件在C:\\Users\\你的用户名\\AppData（文件夹上方查看，点击隐藏的项目）"
                 "\\Local\\Hotta\\Saved\\Config\\WindowsNoEditor，找到GameUserSettings.ini文件，"
@@ -40,12 +41,13 @@ class WorldBossTask(BaseQRSLTask):
             '武器键': '选择切换战场武器',
             '搜索模式': '选择宝箱搜索方式',
             '传送至海嘉德': '仅限亚夏或者维拉boss，每次开始前以前会传送至海嘉德',
+            '传送至洛克哈特': '仅限启罗boss或者部分格网boss，每次开始前以前会传送至洛克哈特。打开就会执行，不打开就不执行',
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
         self.config_type['战斗方式'] = {
             'type': "drop_down",
-             'options': ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺']   # 调整顺序
+             'options': ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺']
         }
         self.config_type['BOSS选择'] = {
             'type': "drop_down",
@@ -63,6 +65,7 @@ class WorldBossTask(BaseQRSLTask):
                 '英招&地驭',
                 '英招',
                 '皇后虫',
+                '皇后虫&地驭（前台）',
             ]
         }
 
@@ -150,6 +153,30 @@ class WorldBossTask(BaseQRSLTask):
                 self.log_info(f"英招&地驭：偶数循环，识别并点击 [{image_name}]")
             return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
 
+        elif boss_choice == '皇后虫&地驭（前台）':
+            if loop_count is None:
+                loop_count = 1
+            if loop_count % 2 == 1:
+                # 奇数轮：移动 + 向下滚动40，再点击皇后虫
+                self.log_info("皇后虫&地驭（前台）：奇数循环，先执行移动和向下滚轮操作")
+                x, y = self._get_scaled_coordinates(1730, 935)
+                self.move(x, y)
+                self.scroll(x, y, -40)          # 向下滚动40个单位
+                self._sleep_with_check(0.5)
+                image_name = 'huanghouchong'
+                self.log_info(f"皇后虫&地驭（前台）：奇数循环，识别并点击 [{image_name}]")
+                return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
+            else:
+                # 偶数轮：移动 + 向上滚动10，再点击地驭
+                self.log_info("皇后虫&地驭（前台）：偶数循环，先执行移动和向上滚轮操作")
+                x, y = self._get_scaled_coordinates(1730, 935)
+                self.move(x, y)
+                self.scroll(x, y, 10)            # 向上滚动10个单位
+                self._sleep_with_check(0.5)
+                image_name = 'diyu'
+                self.log_info(f"皇后虫&地驭（前台）：偶数循环，识别并点击 [{image_name}]")
+                return self._wait_and_click_feature(image_name, timeout=10, after_sleep=1, box=full_box)
+
         if boss_choice == '玛格玛（前台无遮挡）':
             self.log_info("BOSS选择为 [玛格玛]，执行特殊操作：移动至坐标，滚动滚轮，点击")
             x, y = self._get_scaled_coordinates(1730, 935)
@@ -211,7 +238,7 @@ class WorldBossTask(BaseQRSLTask):
         pixel = frame[y, x]
         return self._color_similar(pixel, self.TARGET_COLOR_BGR, tolerance=30)
 
-    # ==================== BOSS刷新检测（双绿点，检测间隔2秒） ====================
+    # ==================== BOSS刷新检测（双绿点，检测间隔1秒，经用户要求优化） ====================
     def _is_boss_spawned(self):
         frame = self.frame
         if frame is None:
@@ -242,13 +269,22 @@ class WorldBossTask(BaseQRSLTask):
         green3 = (pixel3[0] == 161 and pixel3[1] == 209 and pixel3[2] == 47)
         return not (green1 or green3)
 
+    # ==================== BOSS死亡二次确认（改为1秒等待） ====================
+    def _confirm_boss_dead(self):
+        self.log_debug("等待1秒进行二次确认...")
+        self._sleep_with_check(1)   # 从2秒改为1秒，加快响应
+        return self._check_boss_ui_disappeared()
+
     def _phase_b_wait_boss_ui_disappear(self, timeout=600):
-        self.log_info(f"等待首领提示消失，超时{timeout}秒（两点检测）...")
+        self.log_info(f"等待首领提示消失，超时{timeout}秒（二次确认）...")
         start = time.time()
         while time.time() - start < timeout:
             if self._check_boss_ui_disappeared():
-                self.log_info("两个绿色点均不匹配，首领提示已消失")
-                return True
+                if self._confirm_boss_dead():
+                    self.log_info("首领提示已消失（二次确认通过）")
+                    return True
+                else:
+                    self.log_debug("二次确认未通过，继续等待")
             self._sleep_with_check(0.2)
         self.log_error(f"等待首领提示消失超时（{timeout}秒）")
         return False
@@ -511,7 +547,7 @@ class WorldBossTask(BaseQRSLTask):
         finally:
             self.log_info("雅诺（前台）操作线程结束")
 
-    # ==================== 监控线程（检测间隔2秒） ====================
+    # ==================== 监控线程（检测间隔1秒，加快响应） ====================
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
         start_time = time.time()
         boss_spawned_occurred = False
@@ -528,14 +564,19 @@ class WorldBossTask(BaseQRSLTask):
                     boss_spawned.set()
                     self.log_info("监测到BOSS刷新！")
                 else:
-                    self._sleep_with_check(2, interval=2.0)
+                    # 检测间隔改为1秒
+                    self._sleep_with_check(1, interval=1.0)
                     continue
             else:
                 if self._check_boss_ui_disappeared():
-                    boss_dead.set()
-                    self.log_info("监测到BOSS死亡！")
-                    break
-                self._sleep_with_check(2, interval=2.0)
+                    if self._confirm_boss_dead():
+                        boss_dead.set()
+                        self.log_info("监测到BOSS死亡（二次确认通过）！")
+                        break
+                    else:
+                        self.log_debug("二次确认未通过，继续监控")
+                # 检测间隔改为1秒
+                self._sleep_with_check(1, interval=1.0)
 
         self.log_info("BOSS状态监测线程结束")
 
@@ -546,7 +587,7 @@ class WorldBossTask(BaseQRSLTask):
             if self._is_boss_spawned():
                 self.log_info("检测到BOSS刷新！")
                 return 'boss_found'
-            self._sleep_with_check(2, interval=2.0)
+            self._sleep_with_check(2, interval=2.0)  # 刷新检测保持2秒，无需改动
         self.log_info(f"BOSS刷新超时（{timeout}秒）")
         return 'timeout'
 
@@ -841,9 +882,18 @@ class WorldBossTask(BaseQRSLTask):
             self.log_error("南音传送：未找到 sure 图片")
             return False
 
-        if not self._wait_for_target_text(timeout=60):
-            self.log_error("南音传送：超时未检测到目标文字")
-            return False
+        # ---------- 新增：等待回到主页面 ----------
+        self.log_info("南音传送：等待传送后回到主页面...")
+        if not self.wait_for_main_page_color(timeout=30):
+            self.log_warning("南音传送：未检测到主页面，但继续尝试下一步")
+            # 不中断，继续执行
+        # ----------------------------------------
+
+        # ---------- 改为超时10秒，且超时后不返回False ----------
+        if not self._wait_for_target_text(timeout=10):
+            self.log_warning("南音传送：超时未检测到目标文字，继续尝试拾取")
+            # 不返回False，继续执行后续
+        # ----------------------------------------------------
 
         if not self._phase_chest_pickup(chest_box=None):
             self.log_error("南音传送：宝箱拾取失败")
@@ -856,6 +906,7 @@ class WorldBossTask(BaseQRSLTask):
         self.log_info("南音传送搜索成功完成")
         return True
 
+    # ==================== 修改：OCR 目标文字增加“机密魔方” ====================
     def _wait_for_target_text(self, timeout=60):
         self.log_info(f"等待目标文字出现，超时{timeout}秒")
         x1, y1 = self._get_scaled_coordinates(1110, 520)
@@ -869,7 +920,7 @@ class WorldBossTask(BaseQRSLTask):
                 if ocr_results:
                     for box in ocr_results:
                         text = box.name.strip()
-                        if ('太极匣' in text) or ('高级密码箱' in text):
+                        if ('太极匣' in text) or ('高级密码箱' in text) or ('机密魔方' in text):
                             self.log_info(f"检测到目标文字: {text}")
                             return True
             except Exception as e:
@@ -956,7 +1007,7 @@ class WorldBossTask(BaseQRSLTask):
                         self.log_debug(f"OCR识别到: {texts}")
                         for box in ocr_results:
                             text = box.name.strip()
-                            if ('太极匣' in text) or ('高级密码箱' in text):
+                            if ('太极匣' in text) or ('高级密码箱' in text) or ('机密魔方' in text):
                                 target_detected = True
                                 break
                 except Exception as e:
@@ -1018,6 +1069,7 @@ class WorldBossTask(BaseQRSLTask):
             self.log_info("approach_bosschest 被用户手动停止")
             raise
 
+    # ==================== 修改：增加“机密魔方”识别，并指定 full_box ====================
     def _phase_chest_pickup(self, chest_box=None):
         self.log_info("进入宝箱拾取阶段")
 
@@ -1050,7 +1102,7 @@ class WorldBossTask(BaseQRSLTask):
                 if ocr_results:
                     for box in ocr_results:
                         text = box.name.strip()
-                        if ('太极匣' in text) or ('高级密码箱' in text):
+                        if ('太极匣' in text) or ('高级密码箱' in text) or ('机密魔方' in text):
                             text_found = True
                             break
                 if text_found:
@@ -1084,8 +1136,10 @@ class WorldBossTask(BaseQRSLTask):
             self.send_key_safe('f', down_time=0.05)
             frame = self.frame
             if frame is not None:
+                h, w = frame.shape[:2]
+                full_box = Box(0, 0, w, h)
                 for name in ['openchest1', 'openchest2']:
-                    boxes = self.find_feature(name, threshold=0.6)
+                    boxes = self.find_feature(name, box=full_box, threshold=0.6)
                     if boxes:
                         box = boxes[0]
                         self.log_info(f"检测到 {name} 图片，立即点击")
@@ -1102,6 +1156,40 @@ class WorldBossTask(BaseQRSLTask):
         x, y = self._get_scaled_coordinates(1255, 575)
         self.log_info(f"点击奖励坐标 ({x}, {y})")
         self._click_safe(x, y, after_sleep=7)
+        return True
+
+    # ==================== 传送至洛克哈特 ====================
+    def _teleport_to_lockhart(self):
+        """传送至洛克哈特（启罗/格网Boss专用）"""
+        self.log_info("执行传送至洛克哈特")
+
+        self.log_info("按下 Alt + 3")
+        self.send_key_down('alt')
+        self.send_key_down('3')
+        self._sleep_with_check(0.1)
+        self.send_key_up('3')
+        self.send_key_up('alt')
+        self._sleep_with_check(2)
+
+        click_points = [
+            (130, 615, 1),
+            (1510, 720, 1),
+            (250, 395, 1),
+            (1265, 580, 0),
+        ]
+        for x, y, after in click_points:
+            cx, cy = self._get_scaled_coordinates(x, y)
+            self.log_info(f"点击坐标 ({cx}, {cy})")
+            self._click_safe(cx, cy, after_sleep=after)
+
+        self._sleep_with_check(10)
+
+        self.log_info("等待传送后回到主页面...")
+        if not self.wait_for_main_page_color(timeout=30):
+            self.log_error("传送至洛克哈特后未回到主页面")
+            return False
+
+        self.log_info("已回到主页面")
         return True
 
     # ==================== 主循环 ====================
@@ -1129,6 +1217,7 @@ class WorldBossTask(BaseQRSLTask):
                     self._sleep_with_check(5)
                     continue
 
+                # ========== 传送至海嘉德 ==========
                 if self.config.get('传送至海嘉德', False):
                     self.log_info("执行传送至海嘉德")
                     self.send_key('m')
@@ -1142,6 +1231,13 @@ class WorldBossTask(BaseQRSLTask):
                         self._sleep_with_check(5)
                         continue
                     self.log_info("已回到主页面，继续执行")
+
+                # ========== 传送至洛克哈特 ==========
+                if self.config.get('传送至洛克哈特', False):
+                    if not self._teleport_to_lockhart():
+                        self.log_error("传送至洛克哈特后未回到主页面，跳过本次循环")
+                        self._sleep_with_check(5)
+                        continue
 
                 if not self._open_map_and_enter_boss():
                     self.log_error("进入世界BOSS界面失败")
@@ -1159,9 +1255,14 @@ class WorldBossTask(BaseQRSLTask):
                         self.log_error(f"BOSS [{current_boss}] 选择失败，跳过本次循环")
                         self._sleep_with_check(5)
                         continue
+                elif boss_choice == '皇后虫&地驭（前台）':
+                    if not self._select_boss_by_config(boss_choice, loop_count=loop_count):
+                        self.log_error(f"{boss_choice} 选择失败，跳过本次循环")
+                        self._sleep_with_check(5)
+                        continue
                 elif boss_choice == '英招&地驭':
                     if not self._select_boss_by_config(boss_choice, loop_count=loop_count):
-                        self.log_error("英招&地驭选择失败，跳过本次循环")
+                        self.log_error(f"{boss_choice} 选择失败，跳过本次循环")
                         self._sleep_with_check(5)
                         continue
                 else:
