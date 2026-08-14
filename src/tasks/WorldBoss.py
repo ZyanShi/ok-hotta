@@ -891,7 +891,7 @@ class WorldBossTask(BaseQRSLTask):
 
         # ---------- 改为超时10秒，且超时后不返回False ----------
         if not self._wait_for_target_text(timeout=10):
-            self.log_warning("南音传送：超时未检测到目标文字，继续尝试拾取")
+            self.log_info("南音传送：超时未检测到目标文字，继续尝试拾取")
             # 不返回False，继续执行后续
         # ----------------------------------------------------
 
