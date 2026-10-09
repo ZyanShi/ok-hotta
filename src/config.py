@@ -51,6 +51,16 @@ config = {
         'force_no_hdr': False,
         'require_bg': True
     },
+
+    #'adb': {
+    # Mumu模拟器通常使用原生方式（无需adb server），效率极高
+    #    'emulator': 'mumu',           # 明确指定模拟器类型
+    #     'adb_path': 'adb',            # 如果 adb 不在 PATH 中，填完整路径，如 r'D:\Program Files\Netease\MuMu\emulator\nemu\vmonitor\bin\adb_server.exe'
+    #    'packages': ['com.pwrd.hotta.laohu'],  # 替换为你的游戏包名
+    #     'use_native': True,           # 启用 Mumu 原生截图/输入（比 adb 快）
+    #    'device_serial': None,        # 如果有多个设备，指定序列号
+    #},
+
     'start_timeout': 120,
     'window_size': {
         'width': 1200,
@@ -83,15 +93,17 @@ config = {
     'version': version,
     'my_app': ['src.globals', 'Globals'],
     'onetime_tasks': [
-        ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
-        ["src.tasks.TaoFaZuoZhanTask", "TaoFaZuoZhanTask"],
-        ["src.tasks.WorldBoss", "WorldBossTask"],
-        ["src.tasks.AutoCombatTask", "AutoCombatTask"],
-        ["src.tasks.FishingTask", "FishingTask"],
-        ["src.tasks.ZhongFengTuPoTask", "ZhongFengTuPoTask"],
-        ["src.tasks.JieXianMaoDianTask", "JieXianMaoDianTask"],
-        ["ok", "DiagnosisTask"],
-    ],
+    ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
+    ["src.tasks.TaoFaZuoZhanTask", "TaoFaZuoZhanTask"],
+        # ["src.tasks.WorldBoss", "WorldBossTask"],
+    ["src.tasks.MultiWorldBoss", "MultiWorldBossTask"],
+    ["src.tasks.AutoCombatTask", "AutoCombatTask"],
+    ["src.tasks.FishingTask", "FishingTask"],
+    ["src.tasks.ZhongFengTuPoTask", "ZhongFengTuPoTask"],
+    ["src.tasks.JieXianMaoDianTask", "JieXianMaoDianTask"],
+    #["src.tasks.WorldBoss_adb", "WorldBossAdbTask"],
+    ["ok", "DiagnosisTask"],
+],
     'trigger_tasks': [
         ["src.tasks.AutoKeypressTask", "AutoKeypressTask"],
     ],
