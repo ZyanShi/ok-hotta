@@ -41,7 +41,7 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         self.default_config.update({
             '循环模式': '轮换',
-            '前进时间': 3,
+            '前进时间': 2500,
             '等待超时': 60,
             '战斗方式': '自动战斗',
             '武器键': '2',
@@ -70,7 +70,7 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         self.config_description = {
             '循环模式': '轮换：依次打每个BOSS；专注：当前BOSS等待超时后才切换下一个',
-            '前进时间': '进入战斗后按 W 前进的持续时间（秒）',
+            '前进时间': '进入战斗后按 W 前进的持续时间（毫秒）',
             '等待超时': '等待BOSS刷新的超时时间（秒）',
             '战斗方式': '选择战斗模式',
             '武器键': '切换武器按键',
@@ -229,6 +229,12 @@ class MultiWorldBossTask(BaseQRSLTask):
         return False
 
     def _wait_main_page_and_activate(self):
+        """
+        返回值：
+          - False：失败
+          - True：成功但2秒内未检测到宝箱
+          - Box：成功且2秒内检测到宝箱
+        """
         self.log_info("等待返回游戏主页面...")
         if not self.wait_for_main_page_color(timeout=60):
             return False
@@ -243,17 +249,36 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.send_key(weapon_key)
         self._sleep_with_check(0.2)
 
-        forward_time = self.config.get('前进时间', 3)
-        self.log_info(f"前进{forward_time}秒")
+        forward_ms = self.config.get('前进时间', 2500)
+        forward_time = forward_ms / 1000.0
+        self.log_info(f"前进{forward_ms}毫秒（{forward_time}秒）")
         self.send_key_safe('w', down_time=forward_time)
 
         combat_mode = self.config.get('战斗方式', '自动战斗')
         if combat_mode == '自动战斗':
             self.log_info("开启自动战斗")
             self.start_auto_combat()
+
+            # ---------- 新增：首次自动战斗后，持续 2 秒检测宝箱 ----------
+            self.log_info("首次自动战斗后检测宝箱（持续2秒）...")
+            detect_start = time.time()
+            while time.time() - detect_start < 2:
+                frame = self.frame
+                if frame is not None:
+                    h, w = frame.shape[:2]
+                    full_box = Box(0, 0, w, h)
+                    for name in self.CHEST_NAMES:
+                        results = self.find_feature(name, box=full_box, threshold=0.7)
+                        if results:
+                            self.log_info(f"2秒内检测到宝箱 [{name}]，跳转至开箱逻辑")
+                            return results[0]
+                self._sleep_with_check(0.2)
+            self.log_info("2秒内未检测到宝箱，继续等待BOSS刷新")
+            # ----------------------------------------------------------
+            return True
         else:
             self.log_info(f"{combat_mode}模式：不开启自动战斗，由自定义逻辑控制")
-        return True
+            return True
 
     def wait_for_main_page_color(self, timeout):
         start = time.time()
@@ -310,7 +335,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return self._check_boss_ui_disappeared()
 
     def _phase_b_wait_boss_ui_disappear(self, timeout=600):
-        self.log_info(f"等待首领提示消失，超时{timeout}秒（二次确认）...")
+        self.log_info(f"等待首领提示消失，超时{timeout}秒")
         start = time.time()
         while time.time() - start < timeout:
             if self._check_boss_ui_disappeared():
@@ -1021,50 +1046,50 @@ class MultiWorldBossTask(BaseQRSLTask):
 
     def _phase_chest_pickup(self, chest_box=None):
         self.log_info("进入宝箱拾取阶段")
+
         if chest_box is None:
-            self.log_info("未传入宝箱，尝试自动获取")
-            chest_box = self.wait_any_chest(time_out=10)
-            if chest_box is None:
-                self.log_error("无法获取宝箱")
-                return False
-
-        max_retries = 3
-        for retry in range(max_retries):
-            if not self.approach_bosschest(max_walk_time=60, target_chest=chest_box):
-                self.log_error(f"接近宝箱失败 (第{retry + 1}次)")
-                return False
-
-            self._sleep_with_check(1)
-            frame = self.frame
-            if frame is None:
-                self.log_debug("无法获取画面，继续重试")
-                continue
-
-            x1, y1 = self._get_scaled_coordinates(1110, 520)
-            x2, y2 = self._get_scaled_coordinates(1280, 575)
-            ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
-
-            try:
-                ocr_results = self.ocr(box=ocr_box, target_height=540)
-                text_found = False
-                if ocr_results:
-                    for box in ocr_results:
-                        text = box.name.strip()
-                        if ('太极匣' in text) or ('高级密码箱' in text) or ('机密魔方' in text):
-                            text_found = True
-                            break
-                if text_found:
-                    self.log_info("目标文字仍存在，继续拾取流程")
-                    break
-                else:
-                    self.log_info("目标文字已消失，重新接近宝箱")
-            except Exception as e:
-                self.log_debug(f"OCR确认异常: {e}，继续重试")
-                continue
+            # 南音传送场景：OCR 已经确认目标文字，跳过找图标和靠近宝箱
+            self.log_info("未传入宝箱（南音传送场景），跳过宝箱图标查找，直接进入开箱流程")
         else:
-            self.log_error("多次接近后文字仍未稳定存在，拾取失败")
-            return False
+            # 十字搜索 / 米字搜索场景：需要靠近宝箱图标
+            max_retries = 3
+            for retry in range(max_retries):
+                if not self.approach_bosschest(max_walk_time=60, target_chest=chest_box):
+                    self.log_error(f"接近宝箱失败 (第{retry + 1}次)")
+                    return False
 
+                self._sleep_with_check(1)
+                frame = self.frame
+                if frame is None:
+                    self.log_debug("无法获取画面，继续重试")
+                    continue
+
+                x1, y1 = self._get_scaled_coordinates(1110, 520)
+                x2, y2 = self._get_scaled_coordinates(1280, 575)
+                ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
+
+                try:
+                    ocr_results = self.ocr(box=ocr_box, target_height=540)
+                    text_found = False
+                    if ocr_results:
+                        for box in ocr_results:
+                            text = box.name.strip()
+                            if ('太极匣' in text) or ('高级密码箱' in text) or ('机密魔方' in text):
+                                text_found = True
+                                break
+                    if text_found:
+                        self.log_info("目标文字仍存在，继续拾取流程")
+                        break
+                    else:
+                        self.log_info("目标文字已消失，重新接近宝箱")
+                except Exception as e:
+                    self.log_debug(f"OCR确认异常: {e}，继续重试")
+                    continue
+            else:
+                self.log_error("多次接近后文字仍未稳定存在，拾取失败")
+                return False
+
+        # ==================== 公共部分：状态检查 + 按 F 开箱 ====================
         self.log_info("等待1秒后检测角色状态...")
         self._sleep_with_check(1)
 
@@ -1269,11 +1294,27 @@ class MultiWorldBossTask(BaseQRSLTask):
         if not self._wait_and_click_feature('shenlin', timeout=30, after_sleep=8):
             return 'fail'
 
-        # 等待主页面并激活
-        if not self._wait_main_page_and_activate():
+        # 等待主页面并激活（可能返回 True / False / Box）
+        activate_result = self._wait_main_page_and_activate()
+
+        # 失败
+        if activate_result is False:
             self.log_error("启动战斗流程失败")
             return 'fail'
 
+        # 首次自动战斗后检测到宝箱（返回 Box），直接进入开箱流程
+        if activate_result is not True:
+            chest_box = activate_result
+            self.log_info("首次自动战斗后检测到宝箱，直接进入开箱流程")
+            if not self._phase_chest_pickup(chest_box):
+                self.log_error("宝箱拾取失败")
+                return 'fail'
+            if not self._claim_reward():
+                self.log_error("奖励领取失败")
+                return 'fail'
+            return 'success'
+
+        # 否则 activate_result 为 True，走原有逻辑
         self.last_shenlin_time = time.time()
 
         # 战斗阶段
@@ -1345,7 +1386,7 @@ class MultiWorldBossTask(BaseQRSLTask):
     def run(self):
         try:
             loop_mode = self.config.get('循环模式', '轮换')
-            forward_time = self.config.get('前进时间', 3)
+            forward_time = self.config.get('前进时间', 2500)
             wait_timeout = self.config.get('等待超时', 60)
             combat_mode = self.config.get('战斗方式', '自动战斗')
 
