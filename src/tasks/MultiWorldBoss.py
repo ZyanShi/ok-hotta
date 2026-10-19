@@ -17,7 +17,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.group_icon = FluentIcon.MARKET
         self.icon = FluentIcon.MARKET
 
-        # 可选 BOSS 列表（已去掉带 & 的组合及玛格玛）
         boss_options = [
             '罗贝拉格',
             '阿波菲斯',
@@ -25,8 +24,12 @@ class MultiWorldBossTask(BaseQRSLTask):
             '露琪亚',
             '巴巴罗萨',
             '伦迪尔',
+            '玛格玛',
+            '科尔顿',
+            '哈伯拉',
             '朱厌',
             '玄鸦',
+            '饕餮',
             '飞廉',
             '英招',
             '阵点球',
@@ -107,8 +110,12 @@ class MultiWorldBossTask(BaseQRSLTask):
             '露琪亚': 'Sweetie',
             '巴巴罗萨': 'Barbarossa',
             '伦迪尔': 'Lundir',
+            '玛格玛': 'magema',
+            '科尔顿': 'keerdun',
+            '哈伯拉': 'habola',
             '朱厌': 'Zhuyan',
             '玄鸦': 'Xuanya',
+            '饕餮': 'taotie',
             '飞廉': 'Feilian',
             '英招': 'yingzhao',
             '阵点球': 'Zhendianqiu',
@@ -118,7 +125,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         }
         self.last_shenlin_time = 0
 
-    # ==================== 可中断睡眠 ====================
     def _sleep_with_check(self, seconds, interval=0.2):
         elapsed = 0
         while elapsed < seconds:
@@ -127,7 +133,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.sleep(remaining)
             elapsed += remaining
 
-    # ---- 全局按键读取 ----
     def _get_source_key(self):
         try:
             global_config = self.get_global_config(key_config_option)
@@ -164,15 +169,10 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
         return False
 
-    # ==================== 简化后的 BOSS 选择（带3次翻页重试，全屏搜索） ====================
     def _select_boss_by_config(self, boss_choice=None):
         """
-        直接根据 BOSS 名称查找图片并点击，无额外动作，全程全屏搜索。
-        流程：
-          1. 识别 1 秒，找到则点击；
-          2. 未找到 → move + sleep(1) + scroll(-35) + sleep(1) + 识别 1 秒；
-          3. 重复上述翻页 + 识别，共执行 3 次翻页；
-          4. 3 次翻页后仍未找到 → 返回 False（由调用方跳过本次循环）。
+        根据 BOSS 名称全屏找图并点击。
+        未找到则翻页重试，共 3 次，仍未找到返回 False。
         """
         if boss_choice is None:
             boss_choice = self.config.get('BOSS1选择', '罗贝拉格')
@@ -182,7 +182,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info(f"BOSS选择为 [{boss_choice}]，无需额外操作")
             return True
 
-        # ---- 工具函数：构建全屏 full_box ----
         def _make_full_box():
             frame = self.frame
             if frame is None:
@@ -190,7 +189,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             h, w = frame.shape[:2]
             return Box(0, 0, w, h)
 
-        # ---- 工具函数：尝试识别一次（1 秒，全屏），找到则点击并返回 True ----
         def _try_find_and_click(tag=""):
             full_box = _make_full_box()
             if full_box is None:
@@ -205,7 +203,6 @@ class MultiWorldBossTask(BaseQRSLTask):
                 return True
             return False
 
-        # ---- 工具函数：执行一次翻页操作 ----
         def _do_scroll(tag=""):
             self.log_info(f"执行翻页{tag}：move(1730,935) + sleep(1) + scroll(-35) + sleep(1)")
             x, y = self._get_scaled_coordinates(1730, 935)
@@ -214,17 +211,14 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.scroll(x, y, -35)
             self._sleep_with_check(1)
 
-        # ---- 第 1 次识别（无翻页） ----
         if _try_find_and_click("（第1次）"):
             return True
 
-        # ---- 翻页循环执行 3 次，每次翻页后识别一次 ----
         for i in range(1, 4):
             _do_scroll(f"（第{i}次）")
             if _try_find_and_click(f"（翻页后第{i}次）"):
                 return True
 
-        # ---- 3 次翻页后仍未找到 ----
         self.log_error(f"3次翻页后仍未找到 [{image_name}]，跳过本次循环")
         return False
 
@@ -259,7 +253,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info("开启自动战斗")
             self.start_auto_combat()
 
-            # ---------- 新增：首次自动战斗后，持续 2 秒检测宝箱 ----------
             self.log_info("首次自动战斗后检测宝箱（持续2秒）...")
             detect_start = time.time()
             while time.time() - detect_start < 2:
@@ -274,7 +267,6 @@ class MultiWorldBossTask(BaseQRSLTask):
                             return results[0]
                 self._sleep_with_check(0.2)
             self.log_info("2秒内未检测到宝箱，继续等待BOSS刷新")
-            # ----------------------------------------------------------
             return True
         else:
             self.log_info(f"{combat_mode}模式：不开启自动战斗，由自定义逻辑控制")
@@ -298,7 +290,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         pixel = frame[y, x]
         return self._color_similar(pixel, self.TARGET_COLOR_BGR, tolerance=30)
 
-    # ==================== BOSS 刷新检测 ====================
     def _is_boss_spawned(self):
         frame = self.frame
         if frame is None:
@@ -348,7 +339,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_error(f"等待首领提示消失超时（{timeout}秒）")
         return False
 
-    # ==================== 战斗循环 ====================
     def _mengzhang_combat_loop(self, stop_event, boss_spawned, boss_dead):
         frame = self.frame
         if frame is None:
@@ -542,7 +532,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         finally:
             self.log_info("雅诺（前台）操作线程结束")
 
-    # ==================== 监控线程 ====================
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
         start_time = time.time()
         boss_spawned_occurred = False
@@ -581,7 +570,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info(f"BOSS刷新超时（{timeout}秒）")
         return 'timeout'
 
-    # ==================== 宝箱拾取 ====================
     def wait_any_chest(self, time_out=30):
         self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.7")
         start = time.time()
@@ -1048,10 +1036,9 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("进入宝箱拾取阶段")
 
         if chest_box is None:
-            # 南音传送场景：OCR 已经确认目标文字，跳过找图标和靠近宝箱
+            # 南音传送场景：OCR 已确认目标文字，跳过找图标和靠近宝箱
             self.log_info("未传入宝箱（南音传送场景），跳过宝箱图标查找，直接进入开箱流程")
         else:
-            # 十字搜索 / 米字搜索场景：需要靠近宝箱图标
             max_retries = 3
             for retry in range(max_retries):
                 if not self.approach_bosschest(max_walk_time=60, target_chest=chest_box):
@@ -1089,7 +1076,6 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_error("多次接近后文字仍未稳定存在，拾取失败")
                 return False
 
-        # ==================== 公共部分：状态检查 + 按 F 开箱 ====================
         self.log_info("等待1秒后检测角色状态...")
         self._sleep_with_check(1)
 
@@ -1131,7 +1117,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self._click_safe(x, y, after_sleep=7)
         return True
 
-    # ==================== 传送 ====================
     def _teleport_to_haijiade(self):
         self.log_info("执行传送至海嘉德")
         self.send_key('m')
@@ -1147,7 +1132,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         return True
 
     def _teleport_to_jiuyu(self):
-        """传送至九域（基于格网修改，仅改一个坐标）"""
         self.log_info("执行传送至九域")
         self.log_info("按下 Alt + 3")
         self.send_key_down('alt')
@@ -1158,7 +1142,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self._sleep_with_check(2)
         click_points = [
             (130, 615, 1),
-            (520, 725, 1),   # 原格网是 (1030, 725, 1)，九域改为 (520, 725, 1)
+            (520, 725, 1),
             (1265, 580, 0),
         ]
         for x, y, after in click_points:
@@ -1226,7 +1210,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("已回到主页面")
         return True
 
-    # ==================== 搜索并拾取 ====================
     def _search_and_pickup(self, search_mode):
         if search_mode == '南音传送':
             success = self._nanyin_teleport_search()
@@ -1250,14 +1233,12 @@ class MultiWorldBossTask(BaseQRSLTask):
                 return 'fail'
             return 'success'
 
-    # ==================== 执行单个 BOSS 一轮 ====================
     def _execute_boss_round(self, boss_info, wait_timeout, combat_mode):
         boss_index = boss_info['index']
         boss_choice = boss_info['choice']
         search_mode = boss_info['search_mode']
         teleport = boss_info.get('teleport', '不传送')
 
-        # 传送（单选）
         if teleport == '海嘉德':
             self.log_info(f"BOSS{boss_index}：传送至海嘉德")
             if not self._teleport_to_haijiade():
@@ -1274,35 +1255,27 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info(f"BOSS{boss_index}：传送至洛克哈特")
             if not self._teleport_to_lockhart():
                 return 'fail'
-        # '不传送' 则什么都不做
 
-        # 打开地图进入 BOSS
         if not self._open_map_and_enter_boss():
             self.log_error("进入世界BOSS界面失败")
             return 'fail'
 
-        # 选择 BOSS（含翻页重试，失败则跳过本次循环）
         if not self._select_boss_by_config(boss_choice):
             self.log_error(f"BOSS{boss_index} 选择失败，跳过本次循环")
             return 'fail'
 
-        # 点击 gotoboss
         if not self._wait_and_click_feature('gotoboss', timeout=30, after_sleep=0):
             return 'fail'
 
-        # 点击 shenlin
         if not self._wait_and_click_feature('shenlin', timeout=30, after_sleep=8):
             return 'fail'
 
-        # 等待主页面并激活（可能返回 True / False / Box）
         activate_result = self._wait_main_page_and_activate()
 
-        # 失败
         if activate_result is False:
             self.log_error("启动战斗流程失败")
             return 'fail'
 
-        # 首次自动战斗后检测到宝箱（返回 Box），直接进入开箱流程
         if activate_result is not True:
             chest_box = activate_result
             self.log_info("首次自动战斗后检测到宝箱，直接进入开箱流程")
@@ -1314,10 +1287,8 @@ class MultiWorldBossTask(BaseQRSLTask):
                 return 'fail'
             return 'success'
 
-        # 否则 activate_result 为 True，走原有逻辑
         self.last_shenlin_time = time.time()
 
-        # 战斗阶段
         if combat_mode == '自动战斗':
             self.log_info("开始监测BOSS刷新（自动战斗模式）")
             monitor_result = self._monitor_boss_spawn_only(wait_timeout)
@@ -1331,7 +1302,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.start_auto_combat()
             return self._search_and_pickup(search_mode)
         else:
-            # 其他战斗方式，双线程
             stop_event = threading.Event()
             boss_spawned = threading.Event()
             boss_dead = threading.Event()
@@ -1382,7 +1352,6 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_info("检测到BOSS死亡，继续拾取流程")
                 return self._search_and_pickup(search_mode)
 
-    # ==================== 主循环 ====================
     def run(self):
         try:
             loop_mode = self.config.get('循环模式', '轮换')
@@ -1390,7 +1359,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             wait_timeout = self.config.get('等待超时', 60)
             combat_mode = self.config.get('战斗方式', '自动战斗')
 
-            # 构建启用的 BOSS 列表
             bosses = []
             bosses.append({
                 'index': 1,
@@ -1425,7 +1393,6 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_info(f"--- 第 {loop_count} 次循环开始 ---")
                 loop_start_time = time.time()
 
-                # 神临冷却
                 if loop_count > 1 and self.last_shenlin_time != 0:
                     elapsed = time.time() - self.last_shenlin_time
                     if elapsed < 60:
@@ -1446,7 +1413,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                 if loop_mode == '轮换':
                     current_index = (current_index + 1) % len(bosses)
                     self.log_info("轮换模式：切换到下一个 BOSS")
-                else:  # 专注
+                else:
                     if result == 'timeout':
                         current_index = (current_index + 1) % len(bosses)
                         self.log_info("专注模式：等待超时，切换到下一个 BOSS")
