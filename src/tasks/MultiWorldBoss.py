@@ -26,7 +26,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             '伦迪尔',
             '玛格玛',
             '科尔顿',
-            '哈伯拉',
             '朱厌',
             '玄鸦',
             '饕餮',
@@ -35,7 +34,9 @@ class MultiWorldBossTask(BaseQRSLTask):
             '阵点球',
             '幻蝎',
             '地驭',
+            '捍卫者',
             '皇后虫',
+            '灾厄5号',
         ]
         search_options = ['米字搜索', '十字搜索', '南音传送']
         combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺']
@@ -112,7 +113,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             '伦迪尔': 'Lundir',
             '玛格玛': 'magema',
             '科尔顿': 'keerdun',
-            '哈伯拉': 'habola',
             '朱厌': 'Zhuyan',
             '玄鸦': 'Xuanya',
             '饕餮': 'taotie',
@@ -121,7 +121,9 @@ class MultiWorldBossTask(BaseQRSLTask):
             '阵点球': 'Zhendianqiu',
             '幻蝎': 'huanxie',
             '地驭': 'diyu',
+            '捍卫者': 'hanweizhe',
             '皇后虫': 'huanghouchong',
+            '灾厄5号': 'zaiewuhao',
         }
         self.last_shenlin_time = 0
 
