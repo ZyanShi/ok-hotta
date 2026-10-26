@@ -16,9 +16,6 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         'chest6': 0.92, 'chest7': 0.92,
     }
 
-    # 转向合法值（配置值不在此集合时回退为“不转向”）
-    TURN_OPTIONS = ('左转', '右转', '不转向')
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "联合作战"
@@ -27,9 +24,9 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.group_icon = FluentIcon.UP
         self.icon = FluentIcon.PEOPLE
 
+        turn_options = ['左转', '右转', '不转向']
+
         # 配置项（UI显示顺序按字典定义顺序）
-        # 注意：本版本 ok-script 的 default_config 只支持 str/int/bool，
-        # 不要放 tuple，否则 ConfigItemFactory 会 raise ValueError
         self.default_config.update({
             '循环次数': 10000,
             '宝箱等待超时': 180,
@@ -41,14 +38,17 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         })
 
         self.config_description = {
-            '循环次数': '循环执行副本的次数',
-            '宝箱等待超时': '等待宝箱的超时时间（秒）',
-            '启用前进': '是否执行前进步骤（若关闭则跳过前进，直接开启自动战斗）',
-            '前进时间': '按W键前进的时间（秒）',
-            '启用转向': '前进后是否转向：左转 / 右转 / 不转向（填错自动按“不转向”处理）',
-            '转向时间': '按A或D键转向的时间（秒）',
-            '活力开箱': '默认关闭，开启请关闭自动战斗开箱',
+            '循环次数': '执行副本的次数',
+            '宝箱等待超时': '等待宝箱超时（秒）',
+            '启用前进': '是否前进',
+            '前进时间': '前进时长（秒）',
+            '启用转向': '前进后转向',
+            '转向时间': '转向时长（秒）',
+            '活力开箱': '关闭自动战斗开箱时开启',
         }
+
+        # 下拉框
+        self.config_type['启用转向'] = {'type': "drop_down", 'options': turn_options}
 
     def _find_chest_stable(self, confirm_gap=0.3, max_attempts=3):
         """
@@ -200,16 +200,9 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             chest_timeout = self.config.get('宝箱等待超时', 180)
             enable_forward = self.config.get('启用前进', False)
             forward_time = self.config.get('前进时间', 9)
+            enable_turn = self.config.get('启用转向', '不转向')
             turn_time = self.config.get('转向时间', 5)
             use_vitality = self.config.get('活力开箱', False)
-
-            # 转向配置白名单校验：非法值回退为“不转向”
-            enable_turn_raw = str(self.config.get('启用转向', '不转向')).strip()
-            if enable_turn_raw in self.TURN_OPTIONS:
-                enable_turn = enable_turn_raw
-            else:
-                self.log_info(f"启用转向 配置值 '{enable_turn_raw}' 非法，已回退为 '不转向'")
-                enable_turn = '不转向'
 
             self.log_info(f"配置参数: 循环次数={max_loops}, 宝箱超时={chest_timeout}秒, "
                           f"启用前进={enable_forward}, 前进时间={forward_time}秒, "
