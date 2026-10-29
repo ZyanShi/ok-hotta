@@ -39,7 +39,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             '灾厄5号',
         ]
         search_options = ['米字搜索', '十字搜索', '南音传送']
-        combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺', '吸血鬼']
+        combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺', '吸血鬼', '地缚灵']
         loop_mode_options = ['轮换', '专注']
         teleport_options = ['不传送', '海嘉德', '九域', '格网', '洛克哈特']
 
@@ -75,8 +75,8 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.config_description = {
             '循环模式': '轮换：依次打每个BOSS；专注：当前BOSS等待超时后才切换下一个',
             '前进时间': '进入战斗后按 W 前进的持续时间（毫秒）',
-            '等待超时': '等待BOSS刷新的超时时间（秒）',
-            '战斗方式': '选择战斗模式',
+            '等待超时': '等待BOSS刷新的超时时间（秒）；吸血鬼/地缚灵模式下也用于等待宝箱出现',
+            '战斗方式': '选择战斗模式（吸血鬼：南音传送后等宝箱；地缚灵：原地等宝箱，跳过所有前置动作）',
             '武器键': '切换武器按键',
 
             'BOSS1选择': '选择第一个BOSS',
@@ -584,8 +584,8 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info(f"BOSS刷新超时（{timeout}秒）")
         return 'timeout'
 
-    def wait_any_chest(self, time_out=30):
-        self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值0.7")
+    def wait_any_chest(self, time_out=30, threshold=0.7):
+        self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值{threshold}")
         start = time.time()
         while time.time() - start < time_out:
             frame = self.frame
@@ -593,7 +593,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                 h, w = frame.shape[:2]
                 full_box = Box(0, 0, w, h)
                 for name in self.CHEST_NAMES:
-                    results = self.find_feature(name, box=full_box, threshold=0.7)
+                    results = self.find_feature(name, box=full_box, threshold=threshold)
                     if results:
                         self.log_debug(f"找到宝箱: {name}")
                         return results[0]
@@ -898,14 +898,15 @@ class MultiWorldBossTask(BaseQRSLTask):
 
     def _vampire_search(self, timeout):
         """吸血鬼：南音传送后等宝箱出现再开箱，不参与战斗。
-        timeout 为等待宝箱图标出现的超时时间（秒），由"等待超时"配置传入。"""
+        timeout 为等待宝箱图标出现的超时时间（秒），由"等待超时"配置传入。
+        宝箱识别阈值固定 0.67（低于普通模式的 0.7，适配 720p + BitBlt 静态画面）。"""
         self.log_info("吸血鬼：启动南音传送")
         if not self._nanyin_teleport_to_main_page():
             self.log_error("吸血鬼：南音传送失败")
             return False
 
-        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒...")
-        chest = self.wait_any_chest(time_out=timeout)
+        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒，阈值0.67...")
+        chest = self.wait_any_chest(time_out=timeout, threshold=0.67)
         if not chest:
             self.log_error(f"吸血鬼：{timeout}秒内未发现宝箱图标")
             return False
@@ -928,6 +929,34 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         self.log_info("吸血鬼流程成功完成")
         return True
+
+    def _dibuling_round(self, wait_timeout):
+        """地缚灵：原地找宝箱 → 接近 → OCR → 开箱 → 领奖。
+        不做传送、不打开地图、不选BOSS、不神临、不按源器、不检测主页面。"""
+        self.log_info(f"地缚灵：原地寻找宝箱，超时{wait_timeout}秒，阈值0.67...")
+        chest = self.wait_any_chest(time_out=wait_timeout, threshold=0.67)
+        if not chest:
+            self.log_error(f"地缚灵：{wait_timeout}秒内未发现宝箱")
+            return 'fail'
+
+        self.log_info(f"地缚灵：找到宝箱 [{chest.name}]，开始接近")
+        if not self.approach_bosschest(max_walk_time=60, target_chest=chest):
+            self.log_error("地缚灵：接近宝箱失败")
+            return 'fail'
+
+        if not self._wait_for_target_text(timeout=10):
+            self.log_info("地缚灵：超时未检测到目标文字，继续尝试拾取")
+
+        if not self._phase_chest_pickup(chest_box=None):
+            self.log_error("地缚灵：宝箱拾取失败")
+            return 'fail'
+
+        if not self._claim_reward():
+            self.log_error("地缚灵：奖励领取失败")
+            return 'fail'
+
+        self.log_info("地缚灵：本次循环成功完成")
+        return 'success'
 
     def _wait_for_target_text(self, timeout=60):
         self.log_info(f"等待目标文字出现，超时{timeout}秒")
@@ -1287,6 +1316,10 @@ class MultiWorldBossTask(BaseQRSLTask):
             return 'success'
 
     def _execute_boss_round(self, boss_info, wait_timeout, combat_mode):
+        # ===== 地缚灵模式：不做任何前置动作，直接原地找宝箱 =====
+        if combat_mode == '地缚灵':
+            return self._dibuling_round(wait_timeout)
+
         boss_index = boss_info['index']
         boss_choice = boss_info['choice']
         search_mode = boss_info['search_mode']
@@ -1323,7 +1356,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         if not self._wait_and_click_feature('shenlin', timeout=30, after_sleep=8):
             return 'fail'
 
-        # ===== 吸血鬼模式 =====
+        # ===== 吸血鬼模式：不战斗，南音传送后等宝箱 =====
         if combat_mode == '吸血鬼':
             if not self._wait_main_page_vampire():
                 self.log_error("吸血鬼：启动流程失败")
@@ -1457,17 +1490,19 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_info(f"--- 第 {loop_count} 次循环开始 ---")
                 loop_start_time = time.time()
 
-                if loop_count > 1 and self.last_shenlin_time != 0:
-                    elapsed = time.time() - self.last_shenlin_time
-                    if elapsed < 60:
-                        wait_time = 60 - elapsed
-                        self.log_info(f"神临冷却中，已过 {elapsed:.1f}秒，需等待 {wait_time:.1f}秒")
-                        self._sleep_with_check(wait_time)
+                # 地缚灵模式跳过神临冷却和主页面检测
+                if combat_mode != '地缚灵':
+                    if loop_count > 1 and self.last_shenlin_time != 0:
+                        elapsed = time.time() - self.last_shenlin_time
+                        if elapsed < 60:
+                            wait_time = 60 - elapsed
+                            self.log_info(f"神临冷却中，已过 {elapsed:.1f}秒，需等待 {wait_time:.1f}秒")
+                            self._sleep_with_check(wait_time)
 
-                if not self.is_main_page():
-                    self.log_error("无法进入游戏主页面，等待5秒后重试")
-                    self._sleep_with_check(5)
-                    continue
+                    if not self.is_main_page():
+                        self.log_error("无法进入游戏主页面，等待5秒后重试")
+                        self._sleep_with_check(5)
+                        continue
 
                 boss_info = bosses[current_index]
                 self.log_info(f"当前执行 BOSS{boss_info['index']}：{boss_info['choice']}")
