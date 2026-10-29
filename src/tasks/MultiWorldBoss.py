@@ -39,7 +39,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             '灾厄5号',
         ]
         search_options = ['米字搜索', '十字搜索', '南音传送']
-        combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺']
+        combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺', '吸血鬼']
         loop_mode_options = ['轮换', '专注']
         teleport_options = ['不传送', '海嘉德', '九域', '格网', '洛克哈特']
 
@@ -273,6 +273,18 @@ class MultiWorldBossTask(BaseQRSLTask):
         else:
             self.log_info(f"{combat_mode}模式：不开启自动战斗，由自定义逻辑控制")
             return True
+
+    def _wait_main_page_vampire(self):
+        """吸血鬼模式：只等主页面 + 按源器键1，不切武器、不前进、不开自动战斗"""
+        self.log_info("吸血鬼：等待返回游戏主页面...")
+        if not self.wait_for_main_page_color(timeout=60):
+            return False
+        self.log_info(f"吸血鬼：按源器键1 [{self._source_key}]")
+        self.send_key_down(self._source_key)
+        self._sleep_with_check(0.5)
+        self.send_key_up(self._source_key)
+        self._sleep_with_check(0.2)
+        return True
 
     def wait_for_main_page_color(self, timeout):
         start = time.time()
@@ -809,8 +821,8 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("米字移动序列结束，未找到宝箱")
         return None
 
-    def _nanyin_teleport_search(self):
-        self.log_info("启动南音传送搜索")
+    def _nanyin_teleport_to_main_page(self):
+        """南音传送公共前段：开地图 → nanyintp → 虚空渊流 → tp → sure → 等主页面"""
         self.send_key('m')
         self._sleep_with_check(2)
 
@@ -832,7 +844,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self._sleep_with_check(0.5)
 
         if not nanyin_box:
-            self.log_info("南音传送：未找到 nanyintp，点击屏幕中心后继续后续步骤")
+            self.log_info("南音传送：未找到 nanyintp，点击屏幕中心后继续")
             self.click(0.5, 0.5)
             self._sleep_with_check(1)
         else:
@@ -851,7 +863,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         else:
             self._click_box_safe(ocr_results[0], after_sleep=1)
 
-        if not self._wait_and_click_feature('tp', timeout=5, after_sleep=1):
+        if not self._wait_and_click_feature('tp', timeout=3, after_sleep=1):
             self.log_error("南音传送：未找到 tp 图片")
             return False
 
@@ -862,6 +874,13 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("南音传送：等待传送后回到主页面...")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("南音传送：未检测到主页面，但继续尝试下一步")
+
+        return True
+
+    def _nanyin_teleport_search(self):
+        self.log_info("启动南音传送搜索")
+        if not self._nanyin_teleport_to_main_page():
+            return False
 
         if not self._wait_for_target_text(timeout=10):
             self.log_info("南音传送：超时未检测到目标文字，继续尝试拾取")
@@ -875,6 +894,39 @@ class MultiWorldBossTask(BaseQRSLTask):
             return False
 
         self.log_info("南音传送搜索成功完成")
+        return True
+
+    def _vampire_search(self, timeout):
+        """吸血鬼：南音传送后等宝箱出现再开箱，不参与战斗。
+        timeout 为等待宝箱图标出现的超时时间（秒），由"等待超时"配置传入。"""
+        self.log_info("吸血鬼：启动南音传送")
+        if not self._nanyin_teleport_to_main_page():
+            self.log_error("吸血鬼：南音传送失败")
+            return False
+
+        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒...")
+        chest = self.wait_any_chest(time_out=timeout)
+        if not chest:
+            self.log_error(f"吸血鬼：{timeout}秒内未发现宝箱图标")
+            return False
+
+        self.log_info(f"吸血鬼：找到宝箱 [{chest.name}]，开始接近")
+        if not self.approach_bosschest(max_walk_time=60, target_chest=chest):
+            self.log_error("吸血鬼：接近宝箱失败")
+            return False
+
+        if not self._wait_for_target_text(timeout=10):
+            self.log_info("吸血鬼：超时未检测到目标文字，继续尝试拾取")
+
+        if not self._phase_chest_pickup(chest_box=None):
+            self.log_error("吸血鬼：宝箱拾取失败")
+            return False
+
+        if not self._claim_reward():
+            self.log_error("吸血鬼：奖励领取失败")
+            return False
+
+        self.log_info("吸血鬼流程成功完成")
         return True
 
     def _wait_for_target_text(self, timeout=60):
@@ -1038,8 +1090,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("进入宝箱拾取阶段")
 
         if chest_box is None:
-            # 南音传送场景：OCR 已确认目标文字，跳过找图标和靠近宝箱
-            self.log_info("未传入宝箱（南音传送场景），跳过宝箱图标查找，直接进入开箱流程")
+            self.log_info("未传入宝箱，跳过宝箱图标查找，直接进入开箱流程")
         else:
             max_retries = 3
             for retry in range(max_retries):
@@ -1271,6 +1322,17 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         if not self._wait_and_click_feature('shenlin', timeout=30, after_sleep=8):
             return 'fail'
+
+        # ===== 吸血鬼模式 =====
+        if combat_mode == '吸血鬼':
+            if not self._wait_main_page_vampire():
+                self.log_error("吸血鬼：启动流程失败")
+                return 'fail'
+            self.last_shenlin_time = time.time()
+            if not self._vampire_search(wait_timeout):
+                self.log_error("吸血鬼流程失败")
+                return 'fail'
+            return 'success'
 
         activate_result = self._wait_main_page_and_activate()
 
