@@ -1,5 +1,6 @@
 import time
 from ok import BaseTask, Box, TaskDisabledException
+from src.config import main_page_color_option
 
 class BaseQRSLTask(BaseTask):
     """QRSL游戏专用基础任务类"""
@@ -11,8 +12,24 @@ class BaseQRSLTask(BaseTask):
     MAIN_PAGE_COORDS = (22, 63)
     TARGET_CHECK_COORDS = (863, 1028)
     REF_RESOLUTION = (1920, 1080)
-    TARGET_COLOR_BGR = (237, 166, 62)
+    TARGET_COLOR_BGR = (237, 166, 62)  # 默认值，会被配置覆盖
     TARGET_CHECK_COLOR = (236, 236, 236)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._load_custom_colors()
+
+    def _load_custom_colors(self):
+        """动态加载用户自定义的主页面颜色"""
+        try:
+            color_config = self.get_global_config(main_page_color_option)
+            bgr_str = color_config.get('主页面颜色(BGR)', '237,166,62')
+            parts = [int(p.strip()) for p in bgr_str.split(',')]
+            if len(parts) == 3:
+                self.TARGET_COLOR_BGR = tuple(parts)
+        except Exception as e:
+            self.log_debug(f"读取自定义颜色失败，使用默认值: {e}")
+            self.TARGET_COLOR_BGR = (237, 166, 62)
 
     def _get_scaled_coordinates(self, ref_x, ref_y):
         frame = self.frame
