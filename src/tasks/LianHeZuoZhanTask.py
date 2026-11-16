@@ -9,9 +9,20 @@ from src.config import key_config_option
 class LianHeZuoZhanTask(BaseQRSLTask):
     """联合作战自动化任务"""
 
+    # chest1~chest5 是真正的宝箱
     CHEST_NAMES = ['chest1', 'chest2', 'chest3', 'chest4', 'chest5']
     CHEST_THRESHOLDS = {
         'chest1': 0.8, 'chest2': 0.8, 'chest3': 0.8, 'chest4': 0.8, 'chest5': 0.8,
+    }
+
+    # 自动战斗模式下，源器1+源器2 同时按的间隔（秒）
+    AUTO_COMBAT_SOURCE_INTERVAL = 30.5
+
+    # 操作选项 -> 按键映射
+    OPERATION_KEYS = {
+        '前进': 'w',
+        '左转': 'a',
+        '右转': 'd',
     }
 
     def __init__(self, *args, **kwargs):
@@ -22,17 +33,17 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.group_icon = FluentIcon.UP
         self.icon = FluentIcon.PEOPLE
 
-        turn_options = ['左转', '右转', '不转向']
+        operation_options = ['前进', '左转', '右转', '不操作']
         battle_options = ['自动战斗', '孟章（前台）']
 
         self.default_config.update({
             '循环次数': 10000,
             '战斗方式': '自动战斗',
             '宝箱等待超时': 180,
-            '启用前进': False,
-            '前进时间': 9,
-            '启用转向': '不转向',
-            '转向时间': 5,
+            '操作1': '前进',
+            '操作1时间(ms)': 9000,
+            '操作2': '不操作',
+            '操作2时间(ms)': 5000,
             '活力开箱': False,
         })
 
@@ -40,14 +51,15 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             '循环次数': '执行副本的次数',
             '战斗方式': '选择副本内战斗方式',
             '宝箱等待超时': '等待宝箱超时（秒）',
-            '启用前进': '是否前进',
-            '前进时间': '前进时长（秒）',
-            '启用转向': '前进后转向',
-            '转向时间': '转向时长（秒）',
+            '操作1': '进副本后执行的第一个操作',
+            '操作1时间(ms)': '操作1的持续时间（毫秒）',
+            '操作2': '操作1之后执行的第二个操作',
+            '操作2时间(ms)': '操作2的持续时间（毫秒）',
             '活力开箱': '关闭自动战斗开箱时开启',
         }
 
-        self.config_type['启用转向'] = {'type': "drop_down", 'options': turn_options}
+        self.config_type['操作1'] = {'type': "drop_down", 'options': operation_options}
+        self.config_type['操作2'] = {'type': "drop_down", 'options': operation_options}
         self.config_type['战斗方式'] = {'type': "drop_down", 'options': battle_options}
 
     # ---------- 源器键 ----------
@@ -80,13 +92,55 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             self.sleep(remaining)
             elapsed += remaining
 
+    def _do_operation(self, operation, duration_ms, label='操作'):
+        """按配置执行操作1/操作2，'不操作' 直接跳过。duration_ms 单位为毫秒。"""
+        key = self.OPERATION_KEYS.get(operation)
+        if key is None:
+            self.log_info(f"{label}：不操作")
+            return
+        duration = max(duration_ms, 0) / 1000.0
+        self.log_info(f"{label}：{operation} {duration_ms} ms")
+        self.send_key_safe(key, down_time=duration)
+
+    def _press_source_1_and_2(self):
+        """释放源器1和源器2。"""
+        source1_key = self._source_key
+        source2_key = self._get_source_key2()
+        self.log_info("释放源器")
+        try:
+            self.send_key_down(source1_key)
+            self.send_key_down(source2_key)
+            self._sleep_with_check(0.1, interval=0.05)
+            self.send_key_up(source2_key)
+            self.send_key_up(source1_key)
+        except TaskDisabledException:
+            try:
+                self.send_key_up(source2_key)
+            except Exception:
+                pass
+            try:
+                self.send_key_up(source1_key)
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            self.log_error(f"释放源器异常: {e}")
+            try:
+                self.send_key_up(source2_key)
+            except Exception:
+                pass
+            try:
+                self.send_key_up(source1_key)
+            except Exception:
+                pass
+
     # ---------- 宝箱检测 ----------
 
     def _find_chest_stable(self, confirm_gap=0.3, max_attempts=3):
         """连续两帧检测到同一位置（±80px）才算有效。返回 (name, box) 或 (None, None)。"""
         for _ in range(max_attempts):
             self._check_stopped()
-            frame = self.frame
+            frame = self.next_frame()
             if frame is None:
                 self.sleep(0.2)
                 continue
@@ -103,12 +157,12 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 first_center = first_box.center()
                 self.sleep(confirm_gap)
 
-                frame2 = self.frame
+                frame2 = self.next_frame()
                 if frame2 is None:
                     break
                 result2 = self.find_feature(name, box=full_box, threshold=threshold)
                 if not result2:
-                    self.log_debug(f"宝箱 {name} 二次确认失败，判定误检")
+                    self.log_debug(f"宝箱 {name} 二次确认失败")
                     break
 
                 second_box = result2[0] if len(result2) == 1 else self._get_closest_box(result2, first_box)
@@ -119,7 +173,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 if dx < 80 and dy < 80:
                     return name, second_box
 
-                self.log_info(f"宝箱 {name} 两次位置偏移过大，判定误检")
+                self.log_info(f"宝箱 {name} 两次位置偏移过大")
                 break
 
             self.sleep(0.5)
@@ -128,7 +182,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
     def _find_any_chest_once(self):
         """单帧检测任一宝箱图标，返回 (name, box) 或 (None, None)。"""
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             return None, None
         h, w = frame.shape[:2]
@@ -182,7 +236,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     self.sleep(0.05)
                     continue
 
-                frame = self.frame
+                frame = self.next_frame()
                 if frame is None:
                     continue
 
@@ -219,7 +273,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 if not self._adjust_position(chest_x, chest_y, screen_center_x, width, height):
                     last_key_press_time = current_time
 
-            self.log_error(f"接近宝箱超时（{max_walk_time}秒）")
+            self.log_error(f"接近宝箱超时（{max_walk_time}s）")
             return False
         except TaskDisabledException:
             raise
@@ -232,7 +286,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
     def _mengzhang_front_combat_loop(self, stop_event):
         """线程启动后先单击左键一次（无延迟），
         然后循环：源器1 → 等3s → 长按左键60s → 源器2 → 等13s。"""
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("孟章（前台）：无法获取屏幕帧")
             return
@@ -242,7 +296,6 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.log_info(f"孟章（前台）：线程启动，中心坐标 ({center_x}, {center_y})")
 
         try:
-            # 先单击左键一次（无延迟）
             self.log_info("孟章（前台）：单击左键一次")
             try:
                 self.mouse_down(center_x, center_y, key='left')
@@ -320,25 +373,22 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         """自动战斗开箱是瞬间的，sleep(1) 后快速确认一次。
         返回 (still_unopened, chest_name, chest_box)
         """
-        # 1) 优先看 opened chest 图标
         if self._is_opened_chest_visible():
             self.log_info("孟章（前台）：检测到宝箱已打开")
             return False, chest_name, chest_box
 
-        # 2) 看原宝箱图标是否还在
         name_now, box_now = self._find_any_chest_once()
         if name_now is not None:
-            self.log_info(f"孟章（前台）：宝箱 {name_now} 仍在，立即进入接近流程")
+            self.log_info(f"孟章（前台）：宝箱 {name_now} 仍在，进入接近流程")
             return True, name_now, box_now
 
-        # 3) 图标消失 → 再确认一次，排除单帧遮挡
         self.sleep(0.5)
         if self._is_opened_chest_visible():
             self.log_info("孟章（前台）：宝箱已被自动战斗打开")
             return False, chest_name, chest_box
         name_now2, box_now2 = self._find_any_chest_once()
         if name_now2 is not None:
-            self.log_info(f"孟章（前台）：宝箱 {name_now2} 仍在（二次），立即进入接近流程")
+            self.log_info(f"孟章（前台）：宝箱 {name_now2} 仍在，进入接近流程")
             return True, name_now2, box_now2
 
         self.log_info("孟章（前台）：宝箱图标持续消失，判定已被自动战斗打开")
@@ -352,15 +402,15 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
             max_loops = self.config.get('循环次数', 10000)
             chest_timeout = self.config.get('宝箱等待超时', 180)
-            enable_forward = self.config.get('启用前进', False)
-            forward_time = self.config.get('前进时间', 9)
-            enable_turn = self.config.get('启用转向', '不转向')
-            turn_time = self.config.get('转向时间', 5)
+            oper1 = self.config.get('操作1', '前进')
+            oper1_ms = self.config.get('操作1时间(ms)', 9000)
+            oper2 = self.config.get('操作2', '不操作')
+            oper2_ms = self.config.get('操作2时间(ms)', 5000)
             combat_mode = self.config.get('战斗方式', '自动战斗')
             use_vitality = self.config.get('活力开箱', False)
 
             self.log_info(f"配置: 循环={max_loops}, 战斗方式={combat_mode}, 超时={chest_timeout}s, "
-                          f"前进={enable_forward}/{forward_time}s, 转向={enable_turn}/{turn_time}s, 活力开箱={use_vitality}")
+                          f"操作1={oper1}/{oper1_ms}ms, 操作2={oper2}/{oper2_ms}ms, 活力开箱={use_vitality}")
 
             loop_count = 0
 
@@ -378,29 +428,20 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     self.sleep(5)
                     continue
 
-                if enable_forward:
-                    self.log_info(f"前进 {forward_time} 秒...")
-                    self.send_key_safe('w', down_time=forward_time)
-                else:
-                    self.log_info("跳过前进")
-
-                if enable_turn == '左转':
-                    self.log_info(f"左转 {turn_time} 秒...")
-                    self.send_key_safe('a', down_time=turn_time)
-                elif enable_turn == '右转':
-                    self.log_info(f"右转 {turn_time} 秒...")
-                    self.send_key_safe('d', down_time=turn_time)
-                else:
-                    self.log_info("跳过转向")
+                # 进副本后依次执行操作1、操作2
+                self._do_operation(oper1, oper1_ms, label='操作1')
+                self._do_operation(oper2, oper2_ms, label='操作2')
 
                 # 战斗
                 combat_stop = None
                 combat_thread = None
+                next_source_time = None
 
                 if combat_mode == '自动战斗':
                     self.log_info("开启自动战斗")
                     self.start_auto_combat()
                     self.sleep(2)
+                    next_source_time = time.time()
                 elif combat_mode == '孟章（前台）':
                     self.log_info("启动孟章（前台）战斗线程")
                     combat_stop = threading.Event()
@@ -423,17 +464,27 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
                 try:
                     while time.time() - start_time < chest_timeout:
-                        frame = self.frame
+                        self._check_stopped()
+
+                        # 自动战斗模式：每 30.5s 释放一次源器
+                        if combat_mode == '自动战斗' and next_source_time is not None:
+                            if time.time() >= next_source_time:
+                                self._press_source_1_and_2()
+                                next_source_time = time.time() + self.AUTO_COMBAT_SOURCE_INTERVAL
+
+                        frame = self.next_frame()
                         if frame is None:
                             self.sleep(0.5)
                             continue
 
+                        # 1. 已打开的宝箱
                         opened_box = self.find_one('opened chest', threshold=0.7)
                         if opened_box:
                             self.log_info("检测到已打开的宝箱")
                             found_opened_chest = True
                             break
 
+                        # 2. chest1~chest5
                         name, box = self._find_chest_stable()
                         if box is not None:
                             chest_name = name
