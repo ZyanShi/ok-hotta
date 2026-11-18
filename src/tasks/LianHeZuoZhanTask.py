@@ -9,11 +9,8 @@ from src.config import key_config_option
 class LianHeZuoZhanTask(BaseQRSLTask):
     """联合作战自动化任务"""
 
-    # chest1~chest5 是真正的宝箱
+    # chest1~chest5 是真正的宝箱，阈值统一由 BaseQRSLTask.CHEST_THRESHOLD 提供（默认 0.75）
     CHEST_NAMES = ['chest1', 'chest2', 'chest3', 'chest4', 'chest5']
-    CHEST_THRESHOLDS = {
-        'chest1': 0.8, 'chest2': 0.8, 'chest3': 0.8, 'chest4': 0.8, 'chest5': 0.8,
-    }
 
     # 自动战斗模式下，源器1+源器2 同时按的间隔（秒）
     AUTO_COMBAT_SOURCE_INTERVAL = 30.5
@@ -148,7 +145,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             full_box = Box(0, 0, width, height)
 
             for name in self.CHEST_NAMES:
-                threshold = self.CHEST_THRESHOLDS.get(name, 0.8)
+                threshold = self.CHEST_THRESHOLD
                 result = self.find_feature(name, box=full_box, threshold=threshold)
                 if not result:
                     continue
@@ -188,7 +185,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         h, w = frame.shape[:2]
         full_box = Box(0, 0, w, h)
         for name in self.CHEST_NAMES:
-            results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLDS.get(name, 0.8))
+            results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
             if results:
                 return name, results[0]
         return None, None
@@ -246,13 +243,13 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
                 current_chest = None
                 if locked_chest_type:
-                    results = self.find_feature(locked_chest_type, box=full_box, threshold=0.8)
+                    results = self.find_feature(locked_chest_type, box=full_box, threshold=self.CHEST_THRESHOLD)
                     if results:
                         current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
 
                 if current_chest is None:
                     for name in self.CHEST_NAMES:
-                        results = self.find_feature(name, box=full_box, threshold=0.6)
+                        results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                         if results:
                             locked_chest_type = name
                             current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
@@ -327,7 +324,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     while time.time() - start < 60:
                         if stop_event.is_set():
                             break
-                        self._sleep_with_check(1.0, interval=1.0)
+                        self._sleep_with_check(1.0, interval=0.2)
                     self.mouse_up(key='left')
                     self.log_info("孟章（前台）：长按左键60秒结束")
                 except TaskDisabledException:
@@ -354,7 +351,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 while time.time() - start < 13:
                     if stop_event.is_set():
                         break
-                    self._sleep_with_check(1.0, interval=1.0)
+                    self._sleep_with_check(1.0, interval=0.2)
 
         except TaskDisabledException:
             self.log_info("孟章（前台）：收到停止信号")
@@ -410,7 +407,8 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             use_vitality = self.config.get('活力开箱', False)
 
             self.log_info(f"配置: 循环={max_loops}, 战斗方式={combat_mode}, 超时={chest_timeout}s, "
-                          f"操作1={oper1}/{oper1_ms}ms, 操作2={oper2}/{oper2_ms}ms, 活力开箱={use_vitality}")
+                          f"操作1={oper1}/{oper1_ms}ms, 操作2={oper2}/{oper2_ms}ms, 活力开箱={use_vitality}, "
+                          f"宝箱阈值={self.CHEST_THRESHOLD}")
 
             loop_count = 0
 
@@ -474,6 +472,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
                         frame = self.next_frame()
                         if frame is None:
+                            self._check_stopped()
                             self.sleep(0.5)
                             continue
 

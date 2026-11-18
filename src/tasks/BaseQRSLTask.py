@@ -1,6 +1,7 @@
 import time
 from ok import BaseTask, Box, TaskDisabledException
-from src.config import main_page_color_option
+from src.config import main_page_color_option, chest_threshold_option
+
 
 class BaseQRSLTask(BaseTask):
     """QRSL游戏专用基础任务类"""
@@ -26,6 +27,15 @@ class BaseQRSLTask(BaseTask):
         except Exception:
             pass
         return (237, 166, 62)  # 默认值
+
+    @property
+    def CHEST_THRESHOLD(self):
+        """动态读取 chest1~chest5 的识别阈值，UI修改后即时生效，默认 0.75"""
+        try:
+            cfg = self.get_global_config(chest_threshold_option)
+            return float(cfg.get('宝箱阈值', 0.75))
+        except Exception:
+            return 0.75
 
     def _get_scaled_coordinates(self, ref_x, ref_y):
         frame = self.frame
@@ -220,7 +230,7 @@ class BaseQRSLTask(BaseTask):
             height, width = frame.shape[:2]
             full_box = Box(0, 0, width, height)
             for name in self.CHEST_NAMES:
-                result = self.find_feature(name, box=full_box, threshold=0.8)
+                result = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                 if result:
                     return result[0]
             self.sleep(1)
@@ -253,12 +263,12 @@ class BaseQRSLTask(BaseTask):
                 screen_center_x = width // 2
                 current_chest = None
                 if locked_chest_type:
-                    results = self.find_feature(locked_chest_type, box=full_box, threshold=0.8)
+                    results = self.find_feature(locked_chest_type, box=full_box, threshold=self.CHEST_THRESHOLD)
                     if results:
                         current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
                 if current_chest is None:
                     for name in self.CHEST_NAMES:
-                        results = self.find_feature(name, box=full_box, threshold=0.6)
+                        results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                         if results:
                             locked_chest_type = name
                             current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
@@ -297,7 +307,7 @@ class BaseQRSLTask(BaseTask):
             height, width = frame.shape[:2]
             full_box = Box(0, 0, width, height)
             for name in self.CHEST_NAMES:
-                results = self.find_feature(name, box=full_box, threshold=0.6)
+                results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                 if results:
                     return results[0]
             self.sleep(0.5)

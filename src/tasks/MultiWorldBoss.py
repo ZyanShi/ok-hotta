@@ -18,25 +18,10 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.icon = FluentIcon.MARKET
 
         boss_options = [
-            '罗贝拉格',
-            '阿波菲斯',
-            '急冻机甲',
-            '露琪亚',
-            '巴巴罗萨',
-            '伦迪尔',
-            '玛格玛',
-            '科尔顿',
-            '朱厌',
-            '玄鸦',
-            '饕餮',
-            '飞廉',
-            '英招',
-            '阵点球',
-            '幻蝎',
-            '地驭',
-            '捍卫者',
-            '皇后虫',
-            '灾厄5号',
+            '罗贝拉格', '阿波菲斯', '急冻机甲', '露琪亚', '巴巴罗萨',
+            '伦迪尔', '玛格玛', '科尔顿', '朱厌', '玄鸦', '饕餮',
+            '飞廉', '英招', '阵点球', '幻蝎', '地驭', '捍卫者',
+            '皇后虫', '灾厄5号',
         ]
         search_options = ['米字搜索', '十字搜索', '南音传送']
         combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺', '吸血鬼', '地缚灵']
@@ -103,56 +88,48 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.config_type[f'BOSS{i}搜索模式'] = {'type': "drop_down", 'options': search_options}
             self.config_type[f'BOSS{i}传送'] = {'type': "drop_down", 'options': teleport_options}
 
-        # 注意：_source_key 已改为 property，每次现读全局配置，
-        # 不再在 __init__ 里缓存，避免 GUI 修改源器键1后需要重开脚本才生效。
         self.boss_image_map = {
-            '罗贝拉格': None,
-            '阿波菲斯': 'Apophis',
-            '急冻机甲': 'CryoLobster',
-            '露琪亚': 'Sweetie',
-            '巴巴罗萨': 'Barbarossa',
-            '伦迪尔': 'Lundir',
-            '玛格玛': 'magema',
-            '科尔顿': 'keerdun',
-            '朱厌': 'Zhuyan',
-            '玄鸦': 'Xuanya',
-            '饕餮': 'taotie',
-            '飞廉': 'Feilian',
-            '英招': 'yingzhao',
-            '阵点球': 'Zhendianqiu',
-            '幻蝎': 'huanxie',
-            '地驭': 'diyu',
-            '捍卫者': 'hanweizhe',
-            '皇后虫': 'huanghouchong',
+            '罗贝拉格': None, '阿波菲斯': 'Apophis', '急冻机甲': 'CryoLobster',
+            '露琪亚': 'Sweetie', '巴巴罗萨': 'Barbarossa', '伦迪尔': 'Lundir',
+            '玛格玛': 'magema', '科尔顿': 'keerdun', '朱厌': 'Zhuyan',
+            '玄鸦': 'Xuanya', '饕餮': 'taotie', '飞廉': 'Feilian',
+            '英招': 'yingzhao', '阵点球': 'Zhendianqiu', '幻蝎': 'huanxie',
+            '地驭': 'diyu', '捍卫者': 'hanweizhe', '皇后虫': 'huanghouchong',
             '灾厄5号': 'zaiewuhao',
         }
         self.last_shenlin_time = 0
 
-    def _sleep_with_check(self, seconds, interval=0.2):
+    # ---------- 通用 ----------
+
+    def _sleep_with_check(self, seconds, interval=0.2, use_time_sleep=False):
+        """分段 sleep，每段前检查停止。
+        use_time_sleep=True 时用 time.sleep，不受 executor pause 影响，适合战斗线程的固定等待；
+        use_time_sleep=False 时用 self.sleep，会随窗口不可见/executor pause 阻塞。
+        """
         elapsed = 0
         while elapsed < seconds:
             self._check_stopped()
             remaining = min(interval, seconds - elapsed)
-            self.sleep(remaining)
+            if use_time_sleep:
+                time.sleep(remaining)
+            else:
+                self.sleep(remaining)
             elapsed += remaining
 
     def _get_source_key(self):
         try:
-            global_config = self.get_global_config(key_config_option)
-            return global_config.get('源器键1', 'x')
+            return self.get_global_config(key_config_option).get('源器键1', 'x')
         except Exception:
             self.log_debug("读取全局源器键1失败，使用默认值 'x'")
             return 'x'
 
     @property
     def _source_key(self):
-        """每次访问都重新读取全局配置里的源器键1，保证 GUI 修改即时生效。"""
         return self._get_source_key()
 
     def _get_source_key2(self):
         try:
-            global_config = self.get_global_config(key_config_option)
-            return global_config.get('源器键2', 'c')
+            return self.get_global_config(key_config_option).get('源器键2', 'c')
         except Exception:
             self.log_debug("读取全局源器键2失败，使用默认值 'c'")
             return 'c'
@@ -178,10 +155,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         return False
 
     def _select_boss_by_config(self, boss_choice=None):
-        """
-        根据 BOSS 名称全屏找图并点击。
-        未找到则翻页重试，共 3 次，仍未找到返回 False。
-        """
         if boss_choice is None:
             boss_choice = self.config.get('BOSS1选择', '罗贝拉格')
 
@@ -191,7 +164,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             return True
 
         def _make_full_box():
-            frame = self.frame
+            frame = self.next_frame()
             if frame is None:
                 return None
             h, w = frame.shape[:2]
@@ -231,12 +204,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         return False
 
     def _wait_main_page_and_activate(self):
-        """
-        返回值：
-          - False：失败
-          - True：成功但2秒内未检测到宝箱
-          - Box：成功且2秒内检测到宝箱
-        """
         self.log_info("等待返回游戏主页面...")
         if not self.wait_for_main_page_color(timeout=60):
             return False
@@ -264,12 +231,13 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info("首次自动战斗后检测宝箱（持续2秒）...")
             detect_start = time.time()
             while time.time() - detect_start < 2:
-                frame = self.frame
+                self._check_stopped()
+                frame = self.next_frame()
                 if frame is not None:
                     h, w = frame.shape[:2]
                     full_box = Box(0, 0, w, h)
                     for name in self.CHEST_NAMES:
-                        results = self.find_feature(name, box=full_box, threshold=0.7)
+                        results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                         if results:
                             self.log_info(f"2秒内检测到宝箱 [{name}]，跳转至开箱逻辑")
                             return results[0]
@@ -281,8 +249,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             return True
 
     def _wait_main_page_vampire(self):
-        """吸血鬼模式：只等主页面，不切武器、不前进、不开自动战斗、不按源器键。
-        源器键1已移到南音传送点击 sure 后 0.2 秒按（见 _nanyin_teleport_to_main_page）。"""
         self.log_info("吸血鬼：等待返回游戏主页面...")
         if not self.wait_for_main_page_color(timeout=60):
             return False
@@ -291,13 +257,14 @@ class MultiWorldBossTask(BaseQRSLTask):
     def wait_for_main_page_color(self, timeout):
         start = time.time()
         while time.time() - start < timeout:
+            self._check_stopped()
             if self.check_main_page_color():
                 return True
             self._sleep_with_check(0.5)
         return False
 
     def check_main_page_color(self):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             return False
         x, y = self._get_scaled_coordinates(*self.MAIN_PAGE_COORDS)
@@ -307,7 +274,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return self._color_similar(pixel, self.TARGET_COLOR_BGR, tolerance=30)
 
     def _is_boss_spawned(self):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             return False
         x1, y1 = self._get_scaled_coordinates(1295, 155)
@@ -322,7 +289,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return green1 and green3
 
     def _check_boss_ui_disappeared(self):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             return False
         x1, y1 = self._get_scaled_coordinates(1295, 155)
@@ -345,6 +312,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info(f"等待首领提示消失，超时{timeout}秒")
         start = time.time()
         while time.time() - start < timeout:
+            self._check_stopped()
             if self._check_boss_ui_disappeared():
                 if self._confirm_boss_dead():
                     self.log_info("首领提示已消失（二次确认通过）")
@@ -355,8 +323,10 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_error(f"等待首领提示消失超时（{timeout}秒）")
         return False
 
+    # ---------- 战斗线程 ----------
+
     def _mengzhang_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("孟章：无法获取屏幕帧")
             return
@@ -365,7 +335,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         try:
             self.log_info("孟章：按 Enter 键（仅一次）")
             self.send_key('enter')
-            time.sleep(0.8)
+            self._sleep_with_check(0.8, use_time_sleep=True)
             while not stop_event.is_set() and not boss_dead.is_set():
                 self.log_debug("孟章：长按坐标 {} 50秒开始".format((target_x, target_y)))
                 self.mouse_down(target_x, target_y, key='left')
@@ -373,7 +343,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                 while time.time() - start_time < 50:
                     if stop_event.is_set() or boss_dead.is_set():
                         break
-                    self._sleep_with_check(1.0, interval=1.0)
+                    self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
                 self.mouse_up(key='left')
                 self.log_debug("孟章：释放左键")
                 if stop_event.is_set() or boss_dead.is_set():
@@ -381,13 +351,13 @@ class MultiWorldBossTask(BaseQRSLTask):
                 source2_key = self._get_source_key2()
                 self.log_debug(f"孟章：按源器2 ({source2_key})，等待15秒")
                 self.send_key(source2_key)
-                time.sleep(15)
+                self._sleep_with_check(15, use_time_sleep=True)
                 if stop_event.is_set() or boss_dead.is_set():
                     break
                 source1_key = self._source_key
                 self.log_debug(f"孟章：按源器1 ({source1_key})，等待3秒")
                 self.send_key(source1_key)
-                time.sleep(3)
+                self._sleep_with_check(3, use_time_sleep=True)
         except TaskDisabledException:
             self.log_info("孟章操作线程收到禁用信号，退出")
             try:
@@ -408,7 +378,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("孟章操作循环结束")
 
     def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("雅诺：无法获取屏幕帧")
             return
@@ -417,11 +387,11 @@ class MultiWorldBossTask(BaseQRSLTask):
         try:
             self.log_info("雅诺：按 Enter 键")
             self.send_key('enter')
-            time.sleep(0.8)
+            self._sleep_with_check(0.8, use_time_sleep=True)
             self.log_info("雅诺：按下左键，长按开始")
             self.mouse_down(target_x, target_y, key='left')
             while not stop_event.is_set() and not boss_dead.is_set():
-                self._sleep_with_check(1.0, interval=1.0)
+                self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
             self.log_info("雅诺：停止信号或BOSS死亡，释放左键")
             self.mouse_up(key='left')
         except TaskDisabledException:
@@ -444,7 +414,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("雅诺操作循环结束")
 
     def _mengzhang_front_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("孟章（前台）：无法获取屏幕帧")
             return
@@ -469,7 +439,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                 while time.time() - start_time < 50:
                     if stop_event.is_set() or boss_dead.is_set():
                         break
-                    self._sleep_with_check(1.0, interval=1.0)
+                    self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
                 self.mouse_up(key='left')
                 self.log_debug("孟章（前台）：释放左键")
                 if stop_event.is_set() or boss_dead.is_set():
@@ -477,19 +447,13 @@ class MultiWorldBossTask(BaseQRSLTask):
                 source2_key = self._get_source_key2()
                 self.log_debug(f"孟章（前台）：按源器2 ({source2_key})，等待15秒")
                 self.send_key(source2_key)
-                t_before = time.time()
-                time.sleep(15)
-                t_after = time.time()
-                self.log_debug(f"孟章（前台）：源器2等待实际耗时 {t_after - t_before:.3f} 秒")
+                self._sleep_with_check(15, use_time_sleep=True)
                 if stop_event.is_set() or boss_dead.is_set():
                     break
                 source1_key = self._source_key
                 self.log_debug(f"孟章（前台）：按源器1 ({source1_key})，等待3秒")
                 self.send_key(source1_key)
-                t_before = time.time()
-                time.sleep(3)
-                t_after = time.time()
-                self.log_debug(f"孟章（前台）：源器1等待实际耗时 {t_after - t_before:.3f} 秒")
+                self._sleep_with_check(3, use_time_sleep=True)
             except TaskDisabledException:
                 self.log_info("孟章（前台）操作线程收到禁用信号，退出")
                 try:
@@ -507,7 +471,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("孟章（前台）操作循环结束")
 
     def _yanuo_front_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("雅诺（前台）：无法获取屏幕帧")
             return
@@ -530,7 +494,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                     self.send_key('`')
                     self.log_debug("雅诺（前台）：长按2秒后发送反引号键")
                     key_sent = True
-                self._sleep_with_check(1.0, interval=1.0)
+                self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
             self.log_info("雅诺（前台）：释放左键")
             self.mouse_up(key='left')
         except TaskDisabledException:
@@ -548,49 +512,63 @@ class MultiWorldBossTask(BaseQRSLTask):
         finally:
             self.log_info("雅诺（前台）操作线程结束")
 
+    # ---------- 监控线程 ----------
+
     def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
-        start_time = time.time()
-        boss_spawned_occurred = False
-        while not stop_event.is_set() and not boss_dead.is_set():
-            if not boss_spawned_occurred and (time.time() - start_time > timeout):
-                self.log_info(f"BOSS刷新监测超时（{timeout}秒），未检测到BOSS刷新")
-                stop_event.set()
-                break
-            if not boss_spawned_occurred:
-                if self._is_boss_spawned():
-                    boss_spawned_occurred = True
-                    boss_spawned.set()
-                    self.log_info("监测到BOSS刷新！")
-                else:
-                    self._sleep_with_check(1, interval=1.0)
-                    continue
-            else:
-                if self._check_boss_ui_disappeared():
-                    if self._confirm_boss_dead():
-                        boss_dead.set()
-                        self.log_info("监测到BOSS死亡（二次确认通过）！")
-                        break
+        try:
+            start_time = time.time()
+            boss_spawned_occurred = False
+            while not stop_event.is_set() and not boss_dead.is_set():
+                if not boss_spawned_occurred and (time.time() - start_time > timeout):
+                    self.log_info(f"BOSS刷新监测超时（{timeout}秒），未检测到BOSS刷新")
+                    stop_event.set()
+                    break
+                if not boss_spawned_occurred:
+                    if self._is_boss_spawned():
+                        boss_spawned_occurred = True
+                        boss_spawned.set()
+                        self.log_info("监测到BOSS刷新！")
                     else:
-                        self.log_debug("二次确认未通过，继续监控")
-                self._sleep_with_check(1, interval=1.0)
-        self.log_info("BOSS状态监测线程结束")
+                        self._sleep_with_check(1, interval=0.2)
+                        continue
+                else:
+                    if self._check_boss_ui_disappeared():
+                        if self._confirm_boss_dead():
+                            boss_dead.set()
+                            self.log_info("监测到BOSS死亡（二次确认通过）！")
+                            break
+                        else:
+                            self.log_debug("二次确认未通过，继续监控")
+                    self._sleep_with_check(1, interval=0.2)
+        except TaskDisabledException:
+            self.log_info("BOSS状态监测线程收到禁用信号，退出")
+        except Exception as e:
+            self.log_error(f"BOSS状态监测线程异常: {e}")
+        finally:
+            self.log_info("BOSS状态监测线程结束")
 
     def _monitor_boss_spawn_only(self, timeout):
         self.log_info(f"等待BOSS刷新，超时{timeout}秒...")
         start = time.time()
         while time.time() - start < timeout:
+            self._check_stopped()
             if self._is_boss_spawned():
                 self.log_info("检测到BOSS刷新！")
                 return 'boss_found'
-            self._sleep_with_check(2, interval=2.0)
+            self._sleep_with_check(2, interval=0.5)
         self.log_info(f"BOSS刷新超时（{timeout}秒）")
         return 'timeout'
 
-    def wait_any_chest(self, time_out=30, threshold=0.7):
+    # ---------- 宝箱 ----------
+
+    def wait_any_chest(self, time_out=30, threshold=None):
+        if threshold is None:
+            threshold = self.CHEST_THRESHOLD
         self.log_debug(f"等待任意宝箱出现，超时{time_out}秒，阈值{threshold}")
         start = time.time()
         while time.time() - start < time_out:
-            frame = self.frame
+            self._check_stopped()
+            frame = self.next_frame()
             if frame is not None:
                 h, w = frame.shape[:2]
                 full_box = Box(0, 0, w, h)
@@ -604,19 +582,20 @@ class MultiWorldBossTask(BaseQRSLTask):
 
     def _reacquire_chest(self):
         for _ in range(10):
-            frame = self.frame
+            self._check_stopped()
+            frame = self.next_frame()
             if frame is not None:
                 h, w = frame.shape[:2]
                 full_box = Box(0, 0, w, h)
                 for name in self.CHEST_NAMES:
-                    results = self.find_feature(name, box=full_box, threshold=0.6)
+                    results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                     if results:
                         return results[0]
             self._sleep_with_check(0.5)
         return None
 
     def _cross_search(self):
-        self.log_info("启动十字搜索，宝箱阈值0.6")
+        self.log_info(f"启动十字搜索，宝箱阈值{self.CHEST_THRESHOLD}")
         found_event = threading.Event()
         stop_event = threading.Event()
         chest_box = [None]
@@ -625,12 +604,12 @@ class MultiWorldBossTask(BaseQRSLTask):
             try:
                 while not stop_event.is_set() and not found_event.is_set():
                     try:
-                        frame = self.frame
+                        frame = self.next_frame()
                         if frame is not None:
                             h, w = frame.shape[:2]
                             full_box = Box(0, 0, w, h)
                             for name in self.CHEST_NAMES:
-                                results = self.find_feature(name, box=full_box, threshold=0.6)
+                                results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                                 if results:
                                     chest_box[0] = results[0]
                                     self.log_info(f"十字搜索找到宝箱: {name}")
@@ -706,7 +685,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return None
 
     def _mi_search(self):
-        self.log_info("启动米字搜索，宝箱阈值0.6，执行完整移动序列")
+        self.log_info(f"启动米字搜索，宝箱阈值{self.CHEST_THRESHOLD}，执行完整移动序列")
         found_event = threading.Event()
         stop_event = threading.Event()
         chest_box = [None]
@@ -715,12 +694,12 @@ class MultiWorldBossTask(BaseQRSLTask):
             try:
                 while not stop_event.is_set() and not found_event.is_set():
                     try:
-                        frame = self.frame
+                        frame = self.next_frame()
                         if frame is not None:
                             h, w = frame.shape[:2]
                             full_box = Box(0, 0, w, h)
                             for name in self.CHEST_NAMES:
-                                results = self.find_feature(name, box=full_box, threshold=0.6)
+                                results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                                 if results:
                                     chest_box[0] = results[0]
                                     self.log_info(f"米字搜索找到宝箱: {name}")
@@ -824,17 +803,15 @@ class MultiWorldBossTask(BaseQRSLTask):
         return None
 
     def _nanyin_teleport_to_main_page(self, press_source_key=False):
-        """南音传送公共前段：开地图 → nanyintp → 虚空渊流 → tp → sure → 等主页面。
-        press_source_key=True 时（吸血鬼模式），在点击 sure 后 0.2 秒按一次源器键1。"""
         self.send_key('m')
         self._sleep_with_check(2)
 
-        self.log_info("等待 nanyintp 出现，超时2秒，阈值0.75")
+        self.log_info("等待地图标记，超时2秒，阈值0.75")
         start_time = time.time()
         nanyin_box = None
         while time.time() - start_time < 2:
             self._check_stopped()
-            frame = self.frame
+            frame = self.next_frame()
             if frame is None:
                 self._sleep_with_check(0.5)
                 continue
@@ -847,13 +824,13 @@ class MultiWorldBossTask(BaseQRSLTask):
             self._sleep_with_check(0.5)
 
         if not nanyin_box:
-            self.log_info("南音传送：未找到 nanyintp，点击屏幕中心后继续")
+            self.log_info("南音传送：地图标记未就绪，点击屏幕中心后继续")
             self.click(0.5, 0.5)
             self._sleep_with_check(1)
         else:
             self._click_box_safe(nanyin_box, after_sleep=1)
 
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             self.log_error("南音传送：无法获取屏幕帧")
             return False
@@ -862,28 +839,25 @@ class MultiWorldBossTask(BaseQRSLTask):
         ocr_results = self.wait_ocr(box=full_box, match="虚空渊流", time_out=5, raise_if_not_found=False)
 
         if not ocr_results:
-            self.log_error("南音传送：未找到虚空渊流，继续尝试下一步")
+            self.log_error("南音传送：目标地名未识别，继续尝试下一步")
         else:
             self._click_box_safe(ocr_results[0], after_sleep=1)
 
         if not self._wait_and_click_feature('tp', timeout=3, after_sleep=1):
-            self.log_error("南音传送：未找到 tp 图片")
+            self.log_error("南音传送：tp 未找到")
             return False
 
-        # sure 需要精细控制：点击后 0.2s（吸血鬼）按源器1，而不是统一 after_sleep
         sure_box = self.wait_feature('sure', time_out=10, raise_if_not_found=False)
         if not sure_box:
-            self.log_error("南音传送：未找到 sure 图片")
+            self.log_error("南音传送：sure 未找到")
             return False
         self._click_box_safe(sure_box)
         if press_source_key:
-            self._sleep_with_check(0.2)
-            self.log_info(f"吸血鬼：南音传送点击sure后0.2秒，按源器键1 [{self._source_key}]")
+            self.log_info("吸血鬼：执行传送后附加操作")
             self.send_key_down(self._source_key)
             self._sleep_with_check(0.5)
             self.send_key_up(self._source_key)
-            # 点击 sure 后总等待保持约 8 秒（0.2 + 0.5 + 7.3）
-            self._sleep_with_check(7.3)
+            self._sleep_with_check(7.5)
         else:
             self._sleep_with_check(8)
 
@@ -913,25 +887,18 @@ class MultiWorldBossTask(BaseQRSLTask):
         return True
 
     def _vampire_search(self, timeout):
-        """吸血鬼：南音传送后等宝箱出现再开箱，不参与战斗。
-        timeout 为等待宝箱图标出现的超时时间（秒），由"等待超时"配置传入。
-        宝箱识别阈值固定 0.67（低于普通模式的 0.7，适配 720p + BitBlt 静态画面）。
-        找到宝箱后交给 _phase_chest_pickup(chest_box=chest)，由其内部统一完成
-        「WASD 接近 → 二次 OCR 确认文字 → 无文字重新接近 → 有文字连按 F 开箱」的重试循环。
-        源器键1在 _nanyin_teleport_to_main_page(press_source_key=True) 内部、
-        点击 sure 后 0.2 秒按一次。"""
-        self.log_info("吸血鬼：启动南音传送（sure 后 0.2s 按源器1）")
+        self.log_info("吸血鬼：启动南音传送")
         if not self._nanyin_teleport_to_main_page(press_source_key=True):
             self.log_error("吸血鬼：南音传送失败")
             return False
 
-        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒，阈值0.67...")
-        chest = self.wait_any_chest(time_out=timeout, threshold=0.67)
+        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒，阈值{self.CHEST_THRESHOLD}...")
+        chest = self.wait_any_chest(time_out=timeout)
         if not chest:
             self.log_error(f"吸血鬼：{timeout}秒内未发现宝箱图标")
             return False
 
-        self.log_info(f"吸血鬼：找到宝箱 [{chest.name}]，交给拾取阶段（接近+二次OCR确认+重试）")
+        self.log_info(f"吸血鬼：找到宝箱 [{chest.name}]，进入拾取阶段")
         if not self._phase_chest_pickup(chest_box=chest):
             self.log_error("吸血鬼：宝箱拾取失败")
             return False
@@ -944,12 +911,8 @@ class MultiWorldBossTask(BaseQRSLTask):
         return True
 
     def _dibuling_round(self, wait_timeout):
-        """地缚灵：原地找宝箱 → 接近 → 二次 OCR 确认 → 开箱 → 领奖。
-        不做传送、不打开地图、不选BOSS、不神临、不按源器、不检测主页面。
-        找到宝箱后交给 _phase_chest_pickup(chest_box=chest)，由其内部统一完成
-        「WASD 接近 → 二次 OCR 确认文字 → 无文字重新接近 → 有文字连按 F 开箱」的重试循环。"""
-        self.log_info(f"地缚灵：原地寻找宝箱，超时{wait_timeout}秒，阈值0.67...")
-        chest = self.wait_any_chest(time_out=wait_timeout, threshold=0.67)
+        self.log_info(f"地缚灵：原地寻找宝箱，超时{wait_timeout}秒，阈值{self.CHEST_THRESHOLD}...")
+        chest = self.wait_any_chest(time_out=wait_timeout)
         if not chest:
             self.log_error(f"地缚灵：{wait_timeout}秒内未发现宝箱")
             return 'fail'
@@ -973,6 +936,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
         start_time = time.time()
         while time.time() - start_time < timeout:
+            self._check_stopped()
             try:
                 ocr_results = self.ocr(box=ocr_box, target_height=540)
                 if ocr_results:
@@ -1008,6 +972,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         start_time = time.time()
         timeout = 150
         while time.time() - start_time < timeout:
+            self._check_stopped()
             if self._is_character_state_normal():
                 self.log_info("状态已恢复正常")
                 return True
@@ -1018,7 +983,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return False
 
     def _is_character_state_normal(self):
-        frame = self.frame
+        frame = self.next_frame()
         if frame is None:
             return False
         x, y = self._get_scaled_coordinates(1805, 698)
@@ -1054,6 +1019,7 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         try:
             while time.time() - start_time < max_walk_time:
+                self._check_stopped()
                 current_time = time.time()
                 target_detected = False
                 try:
@@ -1077,7 +1043,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                     self._sleep_with_check(0.05)
                     continue
 
-                frame = self.frame
+                frame = self.next_frame()
                 if frame is None:
                     continue
                 height, width = frame.shape[:2]
@@ -1086,13 +1052,13 @@ class MultiWorldBossTask(BaseQRSLTask):
 
                 current_chest = None
                 if locked_chest_type:
-                    results = self.find_feature(locked_chest_type, box=full_box, threshold=0.6)
+                    results = self.find_feature(locked_chest_type, box=full_box, threshold=self.CHEST_THRESHOLD)
                     if results:
                         current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
 
                 if current_chest is None:
                     for name in self.CHEST_NAMES:
-                        results = self.find_feature(name, box=full_box, threshold=0.6)
+                        results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
                         if results:
                             locked_chest_type = name
                             current_chest = results[0] if len(results) == 1 else self._get_closest_box(results, target_chest)
@@ -1136,7 +1102,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                     return False
 
                 self._sleep_with_check(1)
-                frame = self.frame
+                frame = self.next_frame()
                 if frame is None:
                     self.log_debug("无法获取画面，继续重试")
                     continue
@@ -1182,8 +1148,9 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("开始连续按F并检测openchest1/2，超时10秒，阈值0.8")
 
         while time.time() - start_time < timeout:
+            self._check_stopped()
             self.send_key_safe('f', down_time=0.05)
-            frame = self.frame
+            frame = self.next_frame()
             if frame is not None:
                 h, w = frame.shape[:2]
                 full_box = Box(0, 0, w, h)
@@ -1324,7 +1291,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             return 'success'
 
     def _execute_boss_round(self, boss_info, wait_timeout, combat_mode):
-        # ===== 地缚灵模式：不做任何前置动作，直接原地找宝箱 =====
         if combat_mode == '地缚灵':
             return self._dibuling_round(wait_timeout)
 
@@ -1364,7 +1330,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         if not self._wait_and_click_feature('shenlin', timeout=30, after_sleep=8):
             return 'fail'
 
-        # ===== 吸血鬼模式：不战斗，南音传送后等宝箱 =====
         if combat_mode == '吸血鬼':
             if not self._wait_main_page_vampire():
                 self.log_error("吸血鬼：启动流程失败")
@@ -1426,7 +1391,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             t_combat = threading.Thread(target=target, args=(stop_event, boss_spawned, boss_dead), daemon=True)
             t_combat.start()
             self.log_info("操作线程已启动，等待2秒后启动监控线程...")
-            time.sleep(2)
+            self._sleep_with_check(2)
 
             t_monitor = threading.Thread(
                 target=self._monitor_boss_status,
@@ -1438,6 +1403,7 @@ class MultiWorldBossTask(BaseQRSLTask):
 
             start_monitor = time.time()
             while not boss_dead.is_set() and not stop_event.is_set():
+                self._check_stopped()
                 if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
                     self.log_info(f"监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
                     stop_event.set()
@@ -1490,15 +1456,18 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_error("没有启用任何BOSS")
                 return
 
+            self.log_info(f"配置: 循环模式={loop_mode}, 战斗方式={combat_mode}, 等待超时={wait_timeout}s, "
+                          f"宝箱阈值={self.CHEST_THRESHOLD}")
+
             current_index = 0
             loop_count = 0
 
             while True:
                 loop_count += 1
+                self._check_stopped()
                 self.log_info(f"--- 第 {loop_count} 次循环开始 ---")
                 loop_start_time = time.time()
 
-                # 地缚灵模式跳过神临冷却和主页面检测
                 if combat_mode != '地缚灵':
                     if loop_count > 1 and self.last_shenlin_time != 0:
                         elapsed = time.time() - self.last_shenlin_time
