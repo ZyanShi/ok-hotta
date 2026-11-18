@@ -25,11 +25,11 @@ class MultiWorldBossTask(BaseQRSLTask):
         ]
         search_options = ['米字搜索', '十字搜索', '南音传送']
         combat_options = ['自动战斗', '孟章（前台）', '雅诺（前台）', '孟章', '雅诺', '吸血鬼', '地缚灵']
-        loop_mode_options = ['轮换', '专注']
+        loop_mode_options = ['专注','轮换']
         teleport_options = ['不传送', '海嘉德', '九域', '格网', '洛克哈特']
 
         self.default_config.update({
-            '循环模式': '轮换',
+            '循环模式': '专注',
             '前进时间': 2500,
             '等待超时': 60,
             '战斗方式': '自动战斗',
