@@ -15,6 +15,12 @@ main_page_color_option = ConfigOption('主页面识别', {
     '主页面颜色(BGR)': '237,166,62',
 }, description='用于判断是否在主页面')
 
+# ====== 新增：宝箱识别配置 ======
+chest_threshold_option = ConfigOption('宝箱识别', {
+    '宝箱阈值': '0.7',
+}, description='宝箱识别阈值，填空输入 0~1 之间的小数')
+
+
 def make_bottom_right_black(frame):
     try:
         height, width = frame.shape[:2]
@@ -29,11 +35,12 @@ def make_bottom_right_black(frame):
         print(f"Error processing frame: {e}")
         return frame
 
+
 config = {
     'debug': False,
     'use_gui': True,
     'config_folder': 'configs',
-    'global_configs': [key_config_option, main_page_color_option],  # 加入主页面颜色配置
+    'global_configs': [key_config_option, main_page_color_option, chest_threshold_option],
     'screenshot_processor': make_bottom_right_black,
     'gui_icon': 'icons/icon.png',
     'wait_until_before_delay': 0,
@@ -88,7 +95,6 @@ config = {
     'my_app': ['src.globals', 'Globals'],
     'onetime_tasks': [
         ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
-        ["src.tasks.TaoFaZuoZhanTask", "TaoFaZuoZhanTask"],
         ["src.tasks.MultiWorldBoss", "MultiWorldBossTask"],
         ["src.tasks.AutoCombatTask", "AutoCombatTask"],
         ["src.tasks.FishingTask", "FishingTask"],
