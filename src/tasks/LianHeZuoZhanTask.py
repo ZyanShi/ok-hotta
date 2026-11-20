@@ -2,8 +2,8 @@ import time
 import threading
 from ok import Box, TaskDisabledException
 from qfluentwidgets import FluentIcon
+from src.config import chest_threshold_option
 from src.tasks.BaseQRSLTask import BaseQRSLTask
-from src.config import key_config_option
 
 
 class LianHeZuoZhanTask(BaseQRSLTask):
@@ -14,6 +14,11 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
     # 自动战斗模式下，源器1+源器2 同时按的间隔（秒）
     AUTO_COMBAT_SOURCE_INTERVAL = 30.5
+
+    # 'opened chest' 模板只有 25x19 像素且只有 1 个标注样本，原来硬编码 0.7 太松：
+    # 画面里形状/明暗相近的暗色块就能过线，导致“发现宝箱”其实不是宝箱。
+    # 这里改走全局“宝箱阈值”配置，并强制不低于该下限。
+    OPENED_CHEST_MIN_THRESHOLD = 0.85
 
     # 操作选项 -> 按键映射
     OPERATION_KEYS = {
@@ -41,6 +46,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             '操作1时间(ms)': 9000,
             '操作2': '不操作',
             '操作2时间(ms)': 5000,
+            '十字搜索': True,
             '活力开箱': False,
         })
 
@@ -52,6 +58,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             '操作1时间(ms)': '操作1的持续时间（毫秒）',
             '操作2': '操作1之后执行的第二个操作',
             '操作2时间(ms)': '操作2的持续时间（毫秒）',
+            '十字搜索': '宝箱等待超时后、退出副本前，执行一次十字搜索寻找宝箱（单帧检测 chest1~chest5）',
             '活力开箱': '关闭自动战斗开箱时开启',
         }
 
@@ -59,35 +66,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.config_type['操作2'] = {'type': "drop_down", 'options': operation_options}
         self.config_type['战斗方式'] = {'type': "drop_down", 'options': battle_options}
 
-    # ---------- 源器键 ----------
-
-    def _get_source_key(self):
-        try:
-            return self.get_global_config(key_config_option).get('源器键1', 'x')
-        except Exception:
-            self.log_debug("读取源器键1失败，使用默认 'x'")
-            return 'x'
-
-    @property
-    def _source_key(self):
-        return self._get_source_key()
-
-    def _get_source_key2(self):
-        try:
-            return self.get_global_config(key_config_option).get('源器键2', 'c')
-        except Exception:
-            self.log_debug("读取源器键2失败，使用默认 'c'")
-            return 'c'
-
-    # ---------- 通用 ----------
-
-    def _sleep_with_check(self, seconds, interval=0.2):
-        elapsed = 0
-        while elapsed < seconds:
-            self._check_stopped()
-            remaining = min(interval, seconds - elapsed)
-            self.sleep(remaining)
-            elapsed += remaining
+    # ---------- 操作 ----------
 
     def _do_operation(self, operation, duration_ms, label='操作'):
         """按配置执行操作1/操作2，'不操作' 直接跳过。duration_ms 单位为毫秒。"""
@@ -132,6 +111,15 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 pass
 
     # ---------- 宝箱检测 ----------
+
+    @property
+    def OPENED_CHEST_THRESHOLD(self):
+        """'opened chest' 的识别阈值：读全局“宝箱阈值”，但不低于 OPENED_CHEST_MIN_THRESHOLD。"""
+        try:
+            cfg = self.get_global_config(chest_threshold_option)
+            return max(float(cfg.get('宝箱阈值', 0.75)), self.OPENED_CHEST_MIN_THRESHOLD)
+        except Exception:
+            return self.OPENED_CHEST_MIN_THRESHOLD
 
     def _find_chest_stable(self, confirm_gap=0.3, max_attempts=3):
         """连续两帧检测到同一位置（±80px）才算有效。返回 (name, box) 或 (None, None)。"""
@@ -191,7 +179,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         return None, None
 
     def _is_opened_chest_visible(self):
-        return self.find_one('opened chest', threshold=0.7) is not None
+        return self.find_one('opened chest', threshold=self.OPENED_CHEST_THRESHOLD) is not None
 
     # ---------- 活力开箱：OCR检测"开启"字 ----------
 
@@ -280,19 +268,23 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
     # ---------- 孟章（前台）线程 ----------
 
-    def _mengzhang_front_combat_loop(self, stop_event):
-        """线程启动后先单击左键一次（无延迟），
-        然后循环：源器1 → 等3s → 长按左键60s → 源器2 → 等13s。"""
-        frame = self.next_frame()
-        if frame is None:
+    def _mengzhang_front_combat_loop(self, stop_event, center=None):
+        """线程启动后先单击左键一次（在循环前面），本线程循环：
+        技能键 → 等1.5s → 源器1 → 技能键 → 等3s → 长按左键60s → 源器2 → 等15.2s。
+
+        center 由主线程提前算好传入：新线程自己截图会和主线程的宝箱检测抢资源，
+        可能连续失败好几秒（日志里的 got no frame!），导致按 x 前出现明显延迟。
+        """
+        if center is None:
+            center = self._get_screen_center()
+        if center is None:
             self.log_error("孟章（前台）：无法获取屏幕帧")
             return
-        h, w = frame.shape[:2]
-        center_x = w // 2
-        center_y = h // 2
+        center_x, center_y = center
         self.log_info(f"孟章（前台）：线程启动，中心坐标 ({center_x}, {center_y})")
 
         try:
+            # 单击左键一次：只做一次，放在循环前面
             self.log_info("孟章（前台）：单击左键一次")
             try:
                 self.mouse_down(center_x, center_y, key='left')
@@ -305,15 +297,30 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 raise
 
             while not stop_event.is_set():
+                skill_key = self._skill_key
+                self.log_info(f"孟章（前台）：按技能键 [{skill_key}]，等待1.5秒")
+                self.send_key(skill_key)
+
+                start = time.time()
+                while time.time() - start < 1.5:
+                    if stop_event.is_set():
+                        break
+                    self._sleep_with_check(0.5, interval=0.2)
+                if stop_event.is_set():
+                    break
+
+                # 按源器1，紧接着按技能键，然后等 3 秒
                 source1_key = self._source_key
                 self.log_info(f"孟章（前台）：按源器1 [{source1_key}]")
                 self.send_key(source1_key)
+                self.log_info(f"孟章（前台）：按技能键 [{skill_key}]，等待3秒")
+                self.send_key(skill_key)
 
                 start = time.time()
                 while time.time() - start < 3:
                     if stop_event.is_set():
                         break
-                    self._sleep_with_check(0.2, interval=0.2)
+                    self._sleep_with_check(0.5, interval=0.2)
                 if stop_event.is_set():
                     break
 
@@ -348,10 +355,10 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 self.send_key(source2_key)
 
                 start = time.time()
-                while time.time() - start < 13:
+                while time.time() - start < 15.2:
                     if stop_event.is_set():
                         break
-                    self._sleep_with_check(1.0, interval=0.2)
+                    self._sleep_with_check(0.2, interval=0.2)
 
         except TaskDisabledException:
             self.log_info("孟章（前台）：收到停止信号")
@@ -391,6 +398,95 @@ class LianHeZuoZhanTask(BaseQRSLTask):
         self.log_info("孟章（前台）：宝箱图标持续消失，判定已被自动战斗打开")
         return False, chest_name, chest_box
 
+    # ---------- 十字搜索：寻找宝箱 ----------
+
+    def _cross_search_chest(self):
+        """十字移动的同时检测 chest1~chest5，找到就返回 (名称, Box)，否则返回 None。
+
+        移动序列和多世界BOSS的十字搜索一致；检测只看单帧，不做二次确认。
+        """
+        self.log_info("启动十字搜索（检测 chest1~chest5）")
+        found_event = threading.Event()
+        stop_event = threading.Event()
+        found_chest = [None]
+
+        def searcher():
+            try:
+                while not stop_event.is_set() and not found_event.is_set():
+                    try:
+                        frame = self.next_frame()
+                        if frame is not None:
+                            height, width = frame.shape[:2]
+                            full_box = Box(0, 0, width, height)
+                            for name in self.CHEST_NAMES:
+                                results = self.find_feature(name, box=full_box, threshold=self.CHEST_THRESHOLD)
+                                if results:
+                                    found_chest[0] = (name, results[0])
+                                    found_event.set()
+                                    break
+                        self._sleep_with_check(0.1)
+                    except TaskDisabledException:
+                        stop_event.set()
+                        break
+            except Exception as e:
+                self.log_error(f"十字搜索检测线程异常: {e}")
+                stop_event.set()
+
+        def mover():
+            try:
+                moves = [
+                    ('w', 5.0, 0.5),
+                    ('s', 10.0, 0.5),
+                    ('w', 5.0, 0.5),
+                    ('a', 5.0, 0.5),
+                    ('d', 10.0, 0.5),
+                ]
+                for key, down_time, after_sleep in moves:
+                    if stop_event.is_set() or found_event.is_set():
+                        break
+                    self.log_debug(f"十字移动: 按{key} {down_time}秒")
+                    try:
+                        self.send_key_down(key)
+                        press_start = time.time()
+                        while time.time() - press_start < down_time:
+                            if stop_event.is_set() or found_event.is_set():
+                                break
+                            self._sleep_with_check(0.05)
+                    except TaskDisabledException:
+                        stop_event.set()
+                        break
+                    finally:
+                        self.send_key_up(key)
+                    if after_sleep > 0:
+                        self._sleep_with_check(after_sleep)
+            except Exception as e:
+                self.log_error(f"十字移动线程异常: {e}")
+            finally:
+                stop_event.set()
+
+        t_search = threading.Thread(target=searcher, daemon=True, name='LHZZ-search')
+        t_move = threading.Thread(target=mover, daemon=True, name='LHZZ-move')
+        t_search.start()
+        t_move.start()
+        try:
+            while t_search.is_alive() or t_move.is_alive():
+                self._sleep_with_check(0.1)
+                if found_event.is_set():
+                    stop_event.set()
+        finally:
+            stop_event.set()
+            t_search.join(timeout=3)
+            t_move.join(timeout=3)
+            if t_search.is_alive() or t_move.is_alive():
+                self.log_error("十字搜索线程未能及时退出")
+
+        if found_event.is_set():
+            chest_name, chest_box = found_chest[0]
+            self.log_info(f"十字搜索发现宝箱: {chest_name}")
+            return found_chest[0]
+        self.log_info("十字搜索结束，未发现宝箱")
+        return None
+
     # ---------- 主流程 ----------
 
     def run(self):
@@ -426,6 +522,10 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     self.sleep(5)
                     continue
 
+                # 进副本后画面尺寸已确定：这里先把屏幕中心算好，传给孟章线程。
+                # 新线程自己截图会和主线程的宝箱检测抢资源，可能连续失败好几秒。
+                dungeon_center = self._get_screen_center()
+
                 # 进副本后依次执行操作1、操作2
                 self._do_operation(oper1, oper1_ms, label='操作1')
                 self._do_operation(oper2, oper2_ms, label='操作2')
@@ -460,7 +560,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                         combat_stop = threading.Event()
                         combat_thread = threading.Thread(
                             target=self._mengzhang_front_combat_loop,
-                            args=(combat_stop,),
+                            args=(combat_stop, dungeon_center),
                             daemon=True,
                             name='LHZZ-combat',
                         )
@@ -481,7 +581,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                             continue
 
                         # 1. 已打开的宝箱
-                        opened_box = self.find_one('opened chest', threshold=0.7)
+                        opened_box = self.find_one('opened chest', threshold=self.OPENED_CHEST_THRESHOLD)
                         if opened_box:
                             self.log_info("检测到已打开的宝箱")
                             found_opened_chest = True
@@ -550,7 +650,29 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                         else:
                             self.log_error("打开宝箱失败")
                 else:
-                    self.log_error(f"{chest_timeout}秒内未找到宝箱，退出副本重试")
+                    self.log_error(f"{chest_timeout}秒内未找到宝箱")
+                    # 超时后、退出副本前：可选执行一次十字搜索，找宝箱（chest1~chest5）
+                    if self.config.get('十字搜索', True):
+                        # 孟章模式是手动战斗，进十字搜索前先开自动战斗；
+                        # 自动战斗模式本来就在打，不用再点
+                        if combat_mode == '孟章（前台）':
+                            self.log_info("孟章（前台）：十字搜索前先开启自动战斗")
+                            self.start_auto_combat()
+                            self.sleep(1)
+                        self.log_info("执行十字搜索，寻找宝箱")
+                        found = self._cross_search_chest()
+                        if found is not None:
+                            found_name, _ = found
+                            self.log_info(f"十字搜索发现宝箱 {found_name}，开始接近")
+                            # 自动战斗已开启，走近后游戏会自动开箱，这里只需要接近
+                            if self.approach_chest(max_walk_time=60):
+                                self.log_info("宝箱已打开")
+                            else:
+                                self.log_error("接近宝箱失败")
+                        else:
+                            self.log_info("十字搜索未发现宝箱，退出副本重试")
+                    else:
+                        self.log_info("未开启十字搜索，退出副本重试")
 
                 self.log_info("退出副本...")
                 self.exit_dungeon()

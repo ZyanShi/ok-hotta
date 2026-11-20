@@ -28,20 +28,6 @@ class ZhongFengTuPoTask(BaseQRSLTask):
             'options': ['当前关卡']
         }
 
-    def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0, raise_if_not_found=False):
-        """等待指定特征图片出现并点击"""
-        box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False)
-        if box:
-            self.log_info(f"找到并点击 [{feature_name}]")
-            self._click_box_safe(box)
-            if after_sleep > 0:
-                self.sleep(after_sleep)
-            return True
-        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
-        if raise_if_not_found:
-            raise Exception(f"找不到特征 {feature_name}")
-        return False
-
     def _wait_for_any_feature(self, feature_names, timeout, after_sleep=0):
         """等待任意一个特征图片出现，返回 (box, name)"""
         start = time.time()

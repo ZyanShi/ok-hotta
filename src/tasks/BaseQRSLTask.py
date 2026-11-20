@@ -1,6 +1,6 @@
 import time
 from ok import BaseTask, Box, TaskDisabledException
-from src.config import main_page_color_option, chest_threshold_option
+from src.config import main_page_color_option, chest_threshold_option, key_config_option
 
 
 class BaseQRSLTask(BaseTask):
@@ -45,6 +45,82 @@ class BaseQRSLTask(BaseTask):
         scale_x = width / self.REF_RESOLUTION[0]
         scale_y = height / self.REF_RESOLUTION[1]
         return int(ref_x * scale_x), int(ref_y * scale_y)
+
+    # ---------- 通用小工具（原先散落在各任务里，合并到基类） ----------
+
+    def _get_screen_center(self):
+        """获取画面中心坐标，优先用缓存帧，不主动截图。
+
+        后台线程刚启动时调用 next_frame() 可能因截图竞争连续失败（每次约 0.7 秒），
+        会造成“按完 W 后迟迟不按源器”的空等。这里优先用缓存帧计算中心，
+        只有缓存帧也没有时才真正截图。
+        """
+        frame = self.frame
+        if frame is None:
+            frame = self.next_frame()
+        if frame is None:
+            return None
+        height, width = frame.shape[:2]
+        return width // 2, height // 2
+
+    def _sleep_with_check(self, seconds, interval=0.2, use_time_sleep=False):
+        """分段 sleep，每段前检查停止。
+
+        use_time_sleep=True 时用 time.sleep，不受 executor pause 影响（适合后台战斗线程）；
+        use_time_sleep=False 时用 self.sleep，会随窗口不可见 / executor pause 阻塞。
+        """
+        elapsed = 0
+        while elapsed < seconds:
+            self._check_stopped()
+            remaining = min(interval, seconds - elapsed)
+            if use_time_sleep:
+                time.sleep(remaining)
+            else:
+                self.sleep(remaining)
+            elapsed += remaining
+
+    def _get_source_key(self):
+        try:
+            return self.get_global_config(key_config_option).get('源器键1', 'x')
+        except Exception:
+            self.log_debug("读取全局源器键1失败，使用默认值 'x'")
+            return 'x'
+
+    @property
+    def _source_key(self):
+        return self._get_source_key()
+
+    def _get_source_key2(self):
+        try:
+            return self.get_global_config(key_config_option).get('源器键2', 'c')
+        except Exception:
+            self.log_debug("读取全局源器键2失败，使用默认值 'c'")
+            return 'c'
+
+    def _get_skill_key(self):
+        try:
+            return self.get_global_config(key_config_option).get('技能键', 'e')
+        except Exception:
+            self.log_debug("读取全局技能键失败，使用默认值 'e'")
+            return 'e'
+
+    @property
+    def _skill_key(self):
+        return self._get_skill_key()
+
+    def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0, box=None, raise_if_not_found=False):
+        """等待特征图片出现并点击；超时返回 False，raise_if_not_found=True 时抛异常。"""
+        found_box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False, box=box)
+        if found_box:
+            self.log_info(f"找到并点击 [{feature_name}]")
+            self._click_box_safe(found_box)
+            if after_sleep > 0:
+                self._sleep_with_check(after_sleep)
+            return True
+        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
+        if raise_if_not_found:
+            raise Exception(f"找不到特征 {feature_name}")
+        return False
 
     def _execute_atomic_operation(self, operation_func):
         try:

@@ -3,7 +3,6 @@ import threading
 from ok import Box, TaskDisabledException
 from qfluentwidgets import FluentIcon
 from src.tasks.BaseQRSLTask import BaseQRSLTask
-from src.config import key_config_option
 
 
 class MultiWorldBossTask(BaseQRSLTask):
@@ -30,7 +29,7 @@ class MultiWorldBossTask(BaseQRSLTask):
 
         self.default_config.update({
             '循环模式': '专注',
-            '前进时间': 2500,
+            '前进时间': 2000,
             '等待超时': 60,
             '战斗方式': '自动战斗',
             '武器键': '2',
@@ -104,23 +103,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self._round_generation = 0
         self._round_stop_event = None
         self._worker_threads = []
-
-    # ---------- 通用 ----------
-
-    def _sleep_with_check(self, seconds, interval=0.2, use_time_sleep=False):
-        """分段 sleep，每段前检查停止。
-        use_time_sleep=True 时用 time.sleep，不受 executor pause 影响，适合战斗线程的固定等待；
-        use_time_sleep=False 时用 self.sleep，会随窗口不可见/executor pause 阻塞。
-        """
-        elapsed = 0
-        while elapsed < seconds:
-            self._check_stopped()
-            remaining = min(interval, seconds - elapsed)
-            if use_time_sleep:
-                time.sleep(remaining)
-            else:
-                self.sleep(remaining)
-            elapsed += remaining
 
     # ---------- 工作线程生命周期 ----------
 
@@ -213,24 +195,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_debug(f"停用任务时通知工作线程失败: {e}")
         super().disable()
 
-    def _get_source_key(self):
-        try:
-            return self.get_global_config(key_config_option).get('源器键1', 'x')
-        except Exception:
-            self.log_debug("读取全局源器键1失败，使用默认值 'x'")
-            return 'x'
-
-    @property
-    def _source_key(self):
-        return self._get_source_key()
-
-    def _get_source_key2(self):
-        try:
-            return self.get_global_config(key_config_option).get('源器键2', 'c')
-        except Exception:
-            self.log_debug("读取全局源器键2失败，使用默认值 'c'")
-            return 'c'
-
     def _open_map_and_enter_boss(self):
         self.log_info("按M打开地图")
         self.send_key('m')
@@ -239,17 +203,6 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info(f"点击世界BOSS入口，缩放后坐标: ({click_x}, {click_y})")
         self._click_safe(click_x, click_y, after_sleep=2)
         return True
-
-    def _wait_and_click_feature(self, feature_name, timeout, after_sleep=0, box=None):
-        found_box = self.wait_feature(feature_name, time_out=timeout, raise_if_not_found=False, box=box)
-        if found_box:
-            self.log_info(f"找到并点击 [{feature_name}]")
-            self._click_box_safe(found_box)
-            if after_sleep > 0:
-                self._sleep_with_check(after_sleep)
-            return True
-        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
-        return False
 
     def _select_boss_by_config(self, boss_choice=None):
         if boss_choice is None:
@@ -304,21 +257,21 @@ class MultiWorldBossTask(BaseQRSLTask):
         self.log_info("等待返回游戏主页面...")
         if not self.wait_for_main_page_color(timeout=60):
             return False
-        self.log_info(f"按源器键1 [{self._source_key}]")
-        self.send_key_down(self._source_key)
+
+        # 回到主页面后再等 0.5 秒，让落地动作稳定，然后直接按 W 前进
         self._sleep_with_check(0.5)
-        self.send_key_up(self._source_key)
-        self._sleep_with_check(0.2)
 
-        weapon_key = self.config.get('武器键', '2')
-        self.log_info(f"切换武器，按武器键 [{weapon_key}]")
-        self.send_key(weapon_key)
-        self._sleep_with_check(0.2)
-
-        forward_ms = self.config.get('前进时间', 2500)
+        # 落地后直接按 W 前进（不再先按源器1）
+        forward_ms = self.config.get('前进时间', 2000)
         forward_time = forward_ms / 1000.0
         self.log_info(f"前进{forward_ms}毫秒（{forward_time}秒）")
         self.send_key_safe('w', down_time=forward_time)
+
+        # 前进结束后再切武器：按完等 0.5 秒让切换动作生效，然后再启动战斗
+        weapon_key = self.config.get('武器键', '2')
+        self.log_info(f"切换武器，按武器键 [{weapon_key}]")
+        self.send_key(weapon_key)
+        self._sleep_with_check(0.5)
 
         combat_mode = self.config.get('战斗方式', '自动战斗')
         if combat_mode == '自动战斗':
@@ -425,8 +378,7 @@ class MultiWorldBossTask(BaseQRSLTask):
     def _mengzhang_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
         stop_args = (stop_event, boss_dead)
         try:
-            frame = self.next_frame()
-            if frame is None:
+            if self._get_screen_center() is None:
                 self.log_error("孟章：无法获取屏幕帧")
                 return
             target_x, target_y = self._get_scaled_coordinates(1815, 900)
@@ -435,24 +387,34 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.send_key('enter')
             self._wait_event(0.8, *stop_args, generation=generation)
             while not self._should_stop(*stop_args, generation=generation):
-                self.log_debug("孟章：长按坐标 {} 50秒开始".format((target_x, target_y)))
+                skill_key = self._skill_key
+                self.log_info(f"孟章：按技能键 ({skill_key})，等待1.5秒")
+                self.send_key(skill_key)
+                if self._wait_event(1.5, *stop_args, generation=generation):
+                    break
+                source1_key = self._source_key
+                self.log_info(f"孟章：按源器1 ({source1_key})")
+                self.send_key(source1_key)
+                self.log_info(f"孟章：按技能键 ({skill_key})")
+                self.send_key(skill_key)
+                weapon_key = self.config.get('武器键', '2')
+                self.log_info(f"孟章：按武器键 ({weapon_key})，等待3秒")
+                self.send_key(weapon_key)
+                if self._wait_event(3, *stop_args, generation=generation):
+                    break
+                self.log_info("孟章：长按坐标 {} 60秒开始".format((target_x, target_y)))
                 self.mouse_down(target_x, target_y, key='left')
                 try:
-                    should_stop = self._wait_event(50, *stop_args, generation=generation)
+                    should_stop = self._wait_event(60, *stop_args, generation=generation)
                 finally:
                     self.mouse_up(key='left')
                 self.log_debug("孟章：释放左键")
                 if should_stop:
                     break
                 source2_key = self._get_source_key2()
-                self.log_debug(f"孟章：按源器2 ({source2_key})，等待15秒")
+                self.log_info(f"孟章：按源器2 ({source2_key})，等待15.2秒")
                 self.send_key(source2_key)
-                if self._wait_event(15, *stop_args, generation=generation):
-                    break
-                source1_key = self._source_key
-                self.log_debug(f"孟章：按源器1 ({source1_key})，等待3秒")
-                self.send_key(source1_key)
-                if self._wait_event(3, *stop_args, generation=generation):
+                if self._wait_event(15.2, *stop_args, generation=generation):
                     break
         except TaskDisabledException:
             self.log_info("孟章操作线程收到禁用信号，退出")
@@ -474,8 +436,7 @@ class MultiWorldBossTask(BaseQRSLTask):
     def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
         stop_args = (stop_event, boss_dead)
         try:
-            frame = self.next_frame()
-            if frame is None:
+            if self._get_screen_center() is None:
                 self.log_error("雅诺：无法获取屏幕帧")
                 return
             target_x, target_y = self._get_scaled_coordinates(1815, 900)
@@ -510,38 +471,48 @@ class MultiWorldBossTask(BaseQRSLTask):
     def _mengzhang_front_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
         stop_args = (stop_event, boss_dead)
         try:
-            frame = self.next_frame()
-            if frame is None:
+            center = self._get_screen_center()
+            if center is None:
                 self.log_error("孟章（前台）：无法获取屏幕帧")
                 return
-            h, w = frame.shape[:2]
-            center_x = w // 2
-            center_y = h // 2
+            center_x, center_y = center
             self.log_info(f"孟章（前台）：屏幕中心坐标 ({center_x}, {center_y})")
+            # 传送/切图后窗口可能没在前台，先单击一次激活窗口并让游戏重新捕获鼠标，
+            # 否则后面的长按左键不生效
             self.log_debug("孟章（前台）：左键单击一次（初始）")
             self.mouse_down(center_x, center_y, key='left')
             time.sleep(0.05)
             self.mouse_up(key='left')
             self._wait_event(0.1, *stop_args, generation=generation)
             while not self._should_stop(*stop_args, generation=generation):
-                self.log_debug("孟章（前台）：长按左键50秒开始")
+                skill_key = self._skill_key
+                self.log_info(f"孟章（前台）：按技能键 ({skill_key})，等待1.5秒")
+                self.send_key(skill_key)
+                if self._wait_event(1.5, *stop_args, generation=generation):
+                    break
+                source1_key = self._source_key
+                self.log_info(f"孟章（前台）：按源器1 ({source1_key})")
+                self.send_key(source1_key)
+                self.log_info(f"孟章（前台）：按技能键 ({skill_key})")
+                self.send_key(skill_key)
+                weapon_key = self.config.get('武器键', '2')
+                self.log_info(f"孟章（前台）：按武器键 ({weapon_key})，等待3秒")
+                self.send_key(weapon_key)
+                if self._wait_event(3, *stop_args, generation=generation):
+                    break
+                self.log_info("孟章（前台）：长按左键60秒开始")
                 self.mouse_down(center_x, center_y, key='left')
                 try:
-                    should_stop = self._wait_event(50, *stop_args, generation=generation)
+                    should_stop = self._wait_event(60, *stop_args, generation=generation)
                 finally:
                     self.mouse_up(key='left')
                 self.log_debug("孟章（前台）：释放左键")
                 if should_stop:
                     break
                 source2_key = self._get_source_key2()
-                self.log_debug(f"孟章（前台）：按源器2 ({source2_key})，等待15秒")
+                self.log_info(f"孟章（前台）：按源器2 ({source2_key})，等待15.2秒")
                 self.send_key(source2_key)
-                if self._wait_event(15, *stop_args, generation=generation):
-                    break
-                source1_key = self._source_key
-                self.log_debug(f"孟章（前台）：按源器1 ({source1_key})，等待3秒")
-                self.send_key(source1_key)
-                if self._wait_event(3, *stop_args, generation=generation):
+                if self._wait_event(15.2, *stop_args, generation=generation):
                     break
         except TaskDisabledException:
             self.log_info("孟章（前台）操作线程收到禁用信号，退出")
@@ -554,13 +525,11 @@ class MultiWorldBossTask(BaseQRSLTask):
     def _yanuo_front_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
         stop_args = (stop_event, boss_dead)
         try:
-            frame = self.next_frame()
-            if frame is None:
+            center = self._get_screen_center()
+            if center is None:
                 self.log_error("雅诺（前台）：无法获取屏幕帧")
                 return
-            h, w = frame.shape[:2]
-            center_x = w // 2
-            center_y = h // 2
+            center_x, center_y = center
             self.log_info(f"雅诺（前台）：屏幕中心坐标 ({center_x}, {center_y})")
             self.mouse_down(center_x, center_y, key='left')
             time.sleep(0.05)
@@ -1512,7 +1481,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         self._stop_worker_threads()
         try:
             loop_mode = self.config.get('循环模式', '轮换')
-            forward_time = self.config.get('前进时间', 2500)
+            forward_time = self.config.get('前进时间', 2000)
             wait_timeout = self.config.get('等待超时', 60)
             combat_mode = self.config.get('战斗方式', '自动战斗')
 
