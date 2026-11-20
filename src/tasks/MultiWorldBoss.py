@@ -99,6 +99,12 @@ class MultiWorldBossTask(BaseQRSLTask):
         }
         self.last_shenlin_time = 0
 
+        # ---- 工作线程生命周期管理：防止“停止后线程仍在跑 / 重启后双开” ----
+        self._worker_lock = threading.Lock()
+        self._round_generation = 0
+        self._round_stop_event = None
+        self._worker_threads = []
+
     # ---------- 通用 ----------
 
     def _sleep_with_check(self, seconds, interval=0.2, use_time_sleep=False):
@@ -115,6 +121,97 @@ class MultiWorldBossTask(BaseQRSLTask):
             else:
                 self.sleep(remaining)
             elapsed += remaining
+
+    # ---------- 工作线程生命周期 ----------
+
+    def _begin_worker_round(self, stop_event):
+        """登记本轮的停止事件，返回本轮代际号（代际号一变，所有旧线程立即失效）。"""
+        with self._worker_lock:
+            self._round_generation += 1
+            self._round_stop_event = stop_event
+            self._worker_threads = []
+            return self._round_generation
+
+    def _register_worker_thread(self, thread):
+        with self._worker_lock:
+            self._worker_threads.append(thread)
+
+    def _should_stop(self, *events, generation=None):
+        """停止判定：代际过期（任务重启过）或任一事件被 set。
+
+        这里刻意不依赖 self._check_stopped / self.sleep：
+        战斗线程必须在 time.sleep 期间也能被唤醒，否则用户停止后会残留。
+        """
+        if generation is not None and generation != self._round_generation:
+            return True
+        return any(event is not None and event.is_set() for event in events)
+
+    def _wait_event(self, seconds, *events, interval=0.2, generation=None):
+        """可中断等待，返回 True 表示收到停止信号。
+
+        用 time.sleep 而不是 self.sleep，避免 TaskDisabledException 在“左键已按下、
+        尚未抬起”的窗口里抛出，从而漏掉 mouse_up。
+        """
+        deadline = time.time() + seconds
+        while True:
+            if self._should_stop(*events, generation=generation):
+                return True
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return False
+            time.sleep(min(interval, remaining))
+
+    def _release_mouse_safely(self):
+        """无条件抬起左键，避免停止后鼠标一直处于按下状态。"""
+        try:
+            self.mouse_up(key='left')
+        except Exception as e:
+            self.log_debug(f"释放左键失败: {e}")
+
+    def _request_stop_workers(self):
+        """只发停止信号、不阻塞，可从任意线程（含 GUI 线程）调用。
+
+        不在这里抬起鼠标：GUI 线程注入输入有风险（可能落到 ok 自己的窗口上），
+        工作线程收到信号后会在 0.2 秒内自己 mouse_up，执行器线程也会兜底抬键。
+        """
+        with self._worker_lock:
+            stop_event = self._round_stop_event
+            self._round_generation += 1
+        if stop_event is not None:
+            stop_event.set()
+
+    def _stop_worker_threads(self, timeout=5.0):
+        """发停止信号并等待线程真正退出，只能在执行器线程调用（会阻塞）。"""
+        with self._worker_lock:
+            stop_event = self._round_stop_event
+            threads = list(self._worker_threads)
+            self._round_stop_event = None
+            self._worker_threads = []
+            self._round_generation += 1
+        if stop_event is not None:
+            stop_event.set()
+        self._release_mouse_safely()
+        current = threading.current_thread()
+        for thread in threads:
+            if thread is current or not thread.is_alive():
+                continue
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                self.log_error(f"线程 {thread.name} 未能在 {timeout} 秒内退出")
+            else:
+                self.log_debug(f"线程 {thread.name} 已退出")
+
+    def disable(self):
+        """ok 框架在用户点击“停止”时会调用 disable()。
+
+        这里先通知所有工作线程退出并松开左键，再走框架的停用逻辑，
+        保证主线程无论从哪一步被中断，战斗/监控线程都不会残留。
+        """
+        try:
+            self._request_stop_workers()
+        except Exception as e:
+            self.log_debug(f"停用任务时通知工作线程失败: {e}")
+        super().disable()
 
     def _get_source_key(self):
         try:
@@ -325,200 +422,181 @@ class MultiWorldBossTask(BaseQRSLTask):
 
     # ---------- 战斗线程 ----------
 
-    def _mengzhang_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.next_frame()
-        if frame is None:
-            self.log_error("孟章：无法获取屏幕帧")
-            return
-        target_x, target_y = self._get_scaled_coordinates(1815, 900)
-        self.log_info(f"孟章：长按坐标 ({target_x}, {target_y})（已适配分辨率）")
+    def _mengzhang_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
+        stop_args = (stop_event, boss_dead)
         try:
+            frame = self.next_frame()
+            if frame is None:
+                self.log_error("孟章：无法获取屏幕帧")
+                return
+            target_x, target_y = self._get_scaled_coordinates(1815, 900)
+            self.log_info(f"孟章：长按坐标 ({target_x}, {target_y})（已适配分辨率）")
             self.log_info("孟章：按 Enter 键（仅一次）")
             self.send_key('enter')
-            self._sleep_with_check(0.8, use_time_sleep=True)
-            while not stop_event.is_set() and not boss_dead.is_set():
+            self._wait_event(0.8, *stop_args, generation=generation)
+            while not self._should_stop(*stop_args, generation=generation):
                 self.log_debug("孟章：长按坐标 {} 50秒开始".format((target_x, target_y)))
                 self.mouse_down(target_x, target_y, key='left')
-                start_time = time.time()
-                while time.time() - start_time < 50:
-                    if stop_event.is_set() or boss_dead.is_set():
-                        break
-                    self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
-                self.mouse_up(key='left')
+                try:
+                    should_stop = self._wait_event(50, *stop_args, generation=generation)
+                finally:
+                    self.mouse_up(key='left')
                 self.log_debug("孟章：释放左键")
-                if stop_event.is_set() or boss_dead.is_set():
+                if should_stop:
                     break
                 source2_key = self._get_source_key2()
                 self.log_debug(f"孟章：按源器2 ({source2_key})，等待15秒")
                 self.send_key(source2_key)
-                self._sleep_with_check(15, use_time_sleep=True)
-                if stop_event.is_set() or boss_dead.is_set():
+                if self._wait_event(15, *stop_args, generation=generation):
                     break
                 source1_key = self._source_key
                 self.log_debug(f"孟章：按源器1 ({source1_key})，等待3秒")
                 self.send_key(source1_key)
-                self._sleep_with_check(3, use_time_sleep=True)
+                if self._wait_event(3, *stop_args, generation=generation):
+                    break
         except TaskDisabledException:
             self.log_info("孟章操作线程收到禁用信号，退出")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         except Exception as e:
             self.log_error(f"孟章操作循环异常: {e}")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         finally:
-            time.sleep(1)
-            click_x, click_y = self._get_scaled_coordinates(1025, 560)
-            self.log_info(f"孟章：点击坐标 ({click_x}, {click_y}) 以关闭残留界面")
-            self.click(click_x, click_y, after_sleep=0.5)
-        self.log_info("孟章操作循环结束")
+            self._release_mouse_safely()
+            # 只有正常打完才去点“关闭残留界面”，用户主动停止时不要再往游戏里点
+            if not self._should_stop(*stop_args, generation=generation):
+                try:
+                    time.sleep(1)
+                    click_x, click_y = self._get_scaled_coordinates(1025, 560)
+                    self.log_info(f"孟章：点击坐标 ({click_x}, {click_y}) 以关闭残留界面")
+                    self._click_safe(click_x, click_y, after_sleep=0.5)
+                except TaskDisabledException:
+                    pass
+            self.log_info("孟章操作循环结束")
 
-    def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.next_frame()
-        if frame is None:
-            self.log_error("雅诺：无法获取屏幕帧")
-            return
-        target_x, target_y = self._get_scaled_coordinates(1815, 900)
-        self.log_info(f"雅诺：长按坐标 ({target_x}, {target_y})（已适配分辨率）")
+    def _yanuo_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
+        stop_args = (stop_event, boss_dead)
         try:
+            frame = self.next_frame()
+            if frame is None:
+                self.log_error("雅诺：无法获取屏幕帧")
+                return
+            target_x, target_y = self._get_scaled_coordinates(1815, 900)
+            self.log_info(f"雅诺：长按坐标 ({target_x}, {target_y})（已适配分辨率）")
             self.log_info("雅诺：按 Enter 键")
             self.send_key('enter')
-            self._sleep_with_check(0.8, use_time_sleep=True)
+            self._wait_event(0.8, *stop_args, generation=generation)
             self.log_info("雅诺：按下左键，长按开始")
             self.mouse_down(target_x, target_y, key='left')
-            while not stop_event.is_set() and not boss_dead.is_set():
-                self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
-            self.log_info("雅诺：停止信号或BOSS死亡，释放左键")
-            self.mouse_up(key='left')
+            try:
+                while not self._should_stop(*stop_args, generation=generation):
+                    time.sleep(0.2)
+            finally:
+                self.log_info("雅诺：停止信号或BOSS死亡，释放左键")
+                self.mouse_up(key='left')
         except TaskDisabledException:
             self.log_info("雅诺操作线程收到禁用信号，退出")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         except Exception as e:
             self.log_error(f"雅诺操作循环异常: {e}")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         finally:
-            time.sleep(1)
-            click_x, click_y = self._get_scaled_coordinates(1025, 560)
-            self.log_info(f"雅诺：点击坐标 ({click_x}, {click_y}) 以关闭残留界面")
-            self.click(click_x, click_y, after_sleep=0.5)
-        self.log_info("雅诺操作循环结束")
+            self._release_mouse_safely()
+            if not self._should_stop(*stop_args, generation=generation):
+                try:
+                    time.sleep(1)
+                    click_x, click_y = self._get_scaled_coordinates(1025, 560)
+                    self.log_info(f"雅诺：点击坐标 ({click_x}, {click_y}) 以关闭残留界面")
+                    self._click_safe(click_x, click_y, after_sleep=0.5)
+                except TaskDisabledException:
+                    pass
+            self.log_info("雅诺操作循环结束")
 
-    def _mengzhang_front_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.next_frame()
-        if frame is None:
-            self.log_error("孟章（前台）：无法获取屏幕帧")
-            return
-        h, w = frame.shape[:2]
-        center_x = w // 2
-        center_y = h // 2
-        self.log_info(f"孟章（前台）：屏幕中心坐标 ({center_x}, {center_y})")
+    def _mengzhang_front_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
+        stop_args = (stop_event, boss_dead)
         try:
+            frame = self.next_frame()
+            if frame is None:
+                self.log_error("孟章（前台）：无法获取屏幕帧")
+                return
+            h, w = frame.shape[:2]
+            center_x = w // 2
+            center_y = h // 2
+            self.log_info(f"孟章（前台）：屏幕中心坐标 ({center_x}, {center_y})")
             self.log_debug("孟章（前台）：左键单击一次（初始）")
             self.mouse_down(center_x, center_y, key='left')
-            self.sleep(0.05)
+            time.sleep(0.05)
             self.mouse_up(key='left')
-            self.sleep(0.1)
-        except Exception as e:
-            self.log_error(f"孟章（前台）初始单击异常: {e}")
-            return
-        while not stop_event.is_set() and not boss_dead.is_set():
-            try:
+            self._wait_event(0.1, *stop_args, generation=generation)
+            while not self._should_stop(*stop_args, generation=generation):
                 self.log_debug("孟章（前台）：长按左键50秒开始")
                 self.mouse_down(center_x, center_y, key='left')
-                start_time = time.time()
-                while time.time() - start_time < 50:
-                    if stop_event.is_set() or boss_dead.is_set():
-                        break
-                    self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
-                self.mouse_up(key='left')
+                try:
+                    should_stop = self._wait_event(50, *stop_args, generation=generation)
+                finally:
+                    self.mouse_up(key='left')
                 self.log_debug("孟章（前台）：释放左键")
-                if stop_event.is_set() or boss_dead.is_set():
+                if should_stop:
                     break
                 source2_key = self._get_source_key2()
                 self.log_debug(f"孟章（前台）：按源器2 ({source2_key})，等待15秒")
                 self.send_key(source2_key)
-                self._sleep_with_check(15, use_time_sleep=True)
-                if stop_event.is_set() or boss_dead.is_set():
+                if self._wait_event(15, *stop_args, generation=generation):
                     break
                 source1_key = self._source_key
                 self.log_debug(f"孟章（前台）：按源器1 ({source1_key})，等待3秒")
                 self.send_key(source1_key)
-                self._sleep_with_check(3, use_time_sleep=True)
-            except TaskDisabledException:
-                self.log_info("孟章（前台）操作线程收到禁用信号，退出")
-                try:
-                    self.mouse_up(key='left')
-                except:
-                    pass
-                break
-            except Exception as e:
-                self.log_error(f"孟章（前台）操作循环异常: {e}")
-                try:
-                    self.mouse_up(key='left')
-                except:
-                    pass
-                break
-        self.log_info("孟章（前台）操作循环结束")
+                if self._wait_event(3, *stop_args, generation=generation):
+                    break
+        except TaskDisabledException:
+            self.log_info("孟章（前台）操作线程收到禁用信号，退出")
+        except Exception as e:
+            self.log_error(f"孟章（前台）操作循环异常: {e}")
+        finally:
+            self._release_mouse_safely()
+            self.log_info("孟章（前台）操作循环结束")
 
-    def _yanuo_front_combat_loop(self, stop_event, boss_spawned, boss_dead):
-        frame = self.next_frame()
-        if frame is None:
-            self.log_error("雅诺（前台）：无法获取屏幕帧")
-            return
-        h, w = frame.shape[:2]
-        center_x = w // 2
-        center_y = h // 2
-        self.log_info(f"雅诺（前台）：屏幕中心坐标 ({center_x}, {center_y})")
+    def _yanuo_front_combat_loop(self, stop_event, boss_spawned, boss_dead, generation=None):
+        stop_args = (stop_event, boss_dead)
         try:
+            frame = self.next_frame()
+            if frame is None:
+                self.log_error("雅诺（前台）：无法获取屏幕帧")
+                return
+            h, w = frame.shape[:2]
+            center_x = w // 2
+            center_y = h // 2
+            self.log_info(f"雅诺（前台）：屏幕中心坐标 ({center_x}, {center_y})")
             self.mouse_down(center_x, center_y, key='left')
-            self.sleep(0.05)
+            time.sleep(0.05)
             self.mouse_up(key='left')
-            self.sleep(0.1)
+            self._wait_event(0.1, *stop_args, generation=generation)
             self.log_info("雅诺（前台）：长按左键开始（将持续至BOSS死亡或超时），2秒后发送一次反引号键")
             self.mouse_down(center_x, center_y, key='left')
             start_time = time.time()
             key_sent = False
-            while not stop_event.is_set() and not boss_dead.is_set():
-                now = time.time()
-                if not key_sent and (now - start_time >= 2.0):
-                    self.send_key('`')
-                    self.log_debug("雅诺（前台）：长按2秒后发送反引号键")
-                    key_sent = True
-                self._sleep_with_check(1.0, interval=0.2, use_time_sleep=True)
-            self.log_info("雅诺（前台）：释放左键")
-            self.mouse_up(key='left')
+            try:
+                while not self._should_stop(*stop_args, generation=generation):
+                    now = time.time()
+                    if not key_sent and (now - start_time >= 2.0):
+                        self.send_key('`')
+                        self.log_debug("雅诺（前台）：长按2秒后发送反引号键")
+                        key_sent = True
+                    time.sleep(0.2)
+            finally:
+                self.log_info("雅诺（前台）：释放左键")
+                self.mouse_up(key='left')
         except TaskDisabledException:
             self.log_info("雅诺（前台）操作线程收到禁用信号，退出")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         except Exception as e:
             self.log_error(f"雅诺（前台）操作循环异常: {e}")
-            try:
-                self.mouse_up(key='left')
-            except:
-                pass
         finally:
+            self._release_mouse_safely()
             self.log_info("雅诺（前台）操作线程结束")
 
     # ---------- 监控线程 ----------
 
-    def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout):
+    def _monitor_boss_status(self, stop_event, boss_spawned, boss_dead, timeout, generation=None):
+        stop_args = (stop_event, boss_dead)
         try:
             start_time = time.time()
             boss_spawned_occurred = False
-            while not stop_event.is_set() and not boss_dead.is_set():
+            while not self._should_stop(*stop_args, generation=generation):
                 if not boss_spawned_occurred and (time.time() - start_time > timeout):
                     self.log_info(f"BOSS刷新监测超时（{timeout}秒），未检测到BOSS刷新")
                     stop_event.set()
@@ -529,7 +607,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                         boss_spawned.set()
                         self.log_info("监测到BOSS刷新！")
                     else:
-                        self._sleep_with_check(1, interval=0.2)
+                        self._wait_event(1, *stop_args, generation=generation)
                         continue
                 else:
                     if self._check_boss_ui_disappeared():
@@ -539,7 +617,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                             break
                         else:
                             self.log_debug("二次确认未通过，继续监控")
-                    self._sleep_with_check(1, interval=0.2)
+                    self._wait_event(1, *stop_args, generation=generation)
         except TaskDisabledException:
             self.log_info("BOSS状态监测线程收到禁用信号，退出")
         except Exception as e:
@@ -1388,31 +1466,37 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_error(f"未知战斗方式: {combat_mode}")
                 return 'fail'
 
-            t_combat = threading.Thread(target=target, args=(stop_event, boss_spawned, boss_dead), daemon=True)
-            t_combat.start()
-            self.log_info("操作线程已启动，等待2秒后启动监控线程...")
-            self._sleep_with_check(2)
+            generation = self._begin_worker_round(stop_event)
+            try:
+                t_combat = threading.Thread(target=target, args=(stop_event, boss_spawned, boss_dead, generation),
+                                            daemon=True, name='MWB-combat')
+                self._register_worker_thread(t_combat)
+                t_combat.start()
+                self.log_info("操作线程已启动，等待2秒后启动监控线程...")
+                self._sleep_with_check(2)
 
-            t_monitor = threading.Thread(
-                target=self._monitor_boss_status,
-                args=(stop_event, boss_spawned, boss_dead, wait_timeout),
-                daemon=True
-            )
-            t_monitor.start()
-            self.log_info("监控线程已启动，两者并行运行")
+                t_monitor = threading.Thread(
+                    target=self._monitor_boss_status,
+                    args=(stop_event, boss_spawned, boss_dead, wait_timeout, generation),
+                    daemon=True,
+                    name='MWB-monitor'
+                )
+                self._register_worker_thread(t_monitor)
+                t_monitor.start()
+                self.log_info("监控线程已启动，两者并行运行")
 
-            start_monitor = time.time()
-            while not boss_dead.is_set() and not stop_event.is_set():
-                self._check_stopped()
-                if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
-                    self.log_info(f"监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
-                    stop_event.set()
-                    break
-                self._sleep_with_check(0.2)
-
-            stop_event.set()
-            t_combat.join(timeout=2)
-            t_monitor.join(timeout=2)
+                start_monitor = time.time()
+                while not self._should_stop(stop_event, boss_dead, generation=generation):
+                    if not boss_spawned.is_set() and (time.time() - start_monitor > wait_timeout):
+                        self.log_info(f"监测超时（{wait_timeout}秒），未检测到BOSS刷新，终止")
+                        stop_event.set()
+                        break
+                    self._sleep_with_check(0.2)
+            finally:
+                # 关键：主线程无论是正常结束、超时，还是被 TaskDisabledException 中断，
+                # 都必须先发停止信号并等战斗/监控线程真正退出，否则旧线程会一直残留，
+                # 用户再次启动时就变成两个 BOSS 任务同时跑。
+                self._stop_worker_threads()
 
             if not boss_dead.is_set():
                 if not boss_spawned.is_set():
@@ -1424,6 +1508,8 @@ class MultiWorldBossTask(BaseQRSLTask):
                 return self._search_and_pickup(search_mode)
 
     def run(self):
+        # 启动前先回收上一次运行可能残留的线程（用户停止后立刻再次启动的场景）
+        self._stop_worker_threads()
         try:
             loop_mode = self.config.get('循环模式', '轮换')
             forward_time = self.config.get('前进时间', 2500)
@@ -1505,3 +1591,6 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_error(f"多世界BOSS任务异常: {e}", notify=True)
             self.screenshot("multiworldboss_error")
             raise
+        finally:
+            # 兜底：任何退出路径都不允许留下工作线程
+            self._stop_worker_threads()

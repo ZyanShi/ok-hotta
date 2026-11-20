@@ -442,13 +442,6 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     next_source_time = time.time()
                 elif combat_mode == '孟章（前台）':
                     self.log_info("启动孟章（前台）战斗线程")
-                    combat_stop = threading.Event()
-                    combat_thread = threading.Thread(
-                        target=self._mengzhang_front_combat_loop,
-                        args=(combat_stop,),
-                        daemon=True,
-                    )
-                    combat_thread.start()
                 else:
                     self.log_error(f"未知战斗方式: {combat_mode}")
 
@@ -461,6 +454,17 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 chest_name = None
 
                 try:
+                    # 线程放在 try 内部启动：从启动到收尾之间无论哪一步抛异常，
+                    # finally 都会给它发停止信号并 join，不会留下“野线程”。
+                    if combat_mode == '孟章（前台）':
+                        combat_stop = threading.Event()
+                        combat_thread = threading.Thread(
+                            target=self._mengzhang_front_combat_loop,
+                            args=(combat_stop,),
+                            daemon=True,
+                            name='LHZZ-combat',
+                        )
+                        combat_thread.start()
                     while time.time() - start_time < chest_timeout:
                         self._check_stopped()
 
@@ -497,7 +501,9 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     if combat_stop is not None:
                         combat_stop.set()
                         if combat_thread is not None:
-                            combat_thread.join(timeout=3)
+                            combat_thread.join(timeout=5)
+                            if combat_thread.is_alive():
+                                self.log_error("孟章（前台）：战斗线程未能在 5 秒内退出，可能有残留")
                         self.log_info("孟章（前台）：战斗线程已停止")
 
                 # 孟章模式：开自动战斗 → sleep(1) → 快速确认宝箱状态

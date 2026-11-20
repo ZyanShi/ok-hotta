@@ -25,6 +25,7 @@ class WorldBossTask(BaseQRSLTask):
             '武器键': '2',
             '搜索模式': '南音传送',
             '传送至海嘉德': False,
+            '传送至格网': False,
             '传送至洛克哈特': False,
             '提示信息': (
                 "建议修改自动战斗索敌范围，文件在C:\\Users\\你的用户名\\AppData（文件夹上方查看，点击隐藏的项目）"
@@ -41,7 +42,8 @@ class WorldBossTask(BaseQRSLTask):
             '武器键': '选择切换战场武器',
             '搜索模式': '选择宝箱搜索方式',
             '传送至海嘉德': '仅限亚夏或者维拉boss，每次开始前以前会传送至海嘉德',
-            '传送至洛克哈特': '仅限启罗boss或者部分格网boss，每次开始前以前会传送至洛克哈特。打开就会执行，不打开就不执行',
+            '传送至格网': '仅限部分格网和九域boss，每次开始前会传送至格网。',
+            '传送至洛克哈特': '仅限启罗boss或者部分格网boss，每次开始前以前会传送至洛克哈特。',
             '提示信息': '索敌范围',
         }
         self.config_type['搜索模式'] = {'type': "drop_down", 'options': ['米字搜索', '十字搜索', '南音传送']}
@@ -841,10 +843,10 @@ class WorldBossTask(BaseQRSLTask):
         self.send_key('m')
         self._sleep_with_check(2)
 
-        self.log_info("等待 nanyintp 出现，超时10秒，阈值0.7")
+        self.log_info("等待 nanyintp 出现，超时5秒，阈值0.75")
         start_time = time.time()
         nanyin_box = None
-        while time.time() - start_time < 10:
+        while time.time() - start_time < 5:
             self._check_stopped()
             frame = self.frame
             if frame is None:
@@ -852,7 +854,7 @@ class WorldBossTask(BaseQRSLTask):
                 continue
             h, w = frame.shape[:2]
             full_box = Box(0, 0, w, h)
-            results = self.find_feature('nanyintp', box=full_box, threshold=0.7)
+            results = self.find_feature('nanyintp', box=full_box, threshold=0.75)
             if results:
                 nanyin_box = results[0]
                 break
@@ -865,16 +867,20 @@ class WorldBossTask(BaseQRSLTask):
         else:
             self._click_box_safe(nanyin_box, after_sleep=1)
 
-        x1, y1 = self._get_scaled_coordinates(1370, 570)
-        x2, y2 = self._get_scaled_coordinates(1490, 620)
-        ocr_box = Box(x1, y1, width=x2 - x1, height=y2 - y1)
-        ocr_results = self.wait_ocr(box=ocr_box, match="虚空渊流", time_out=5, raise_if_not_found=False)
+        frame = self.frame
+        if frame is None:
+            self.log_error("南音传送：无法获取屏幕帧")
+            return False
+        h, w = frame.shape[:2]
+        full_box = Box(0, 0, w, h)
+        ocr_results = self.wait_ocr(box=full_box, match="虚空渊流", time_out=5, raise_if_not_found=False)
+
         if not ocr_results:
             self.log_error("南音传送：未找到虚空渊流，继续尝试下一步")
         else:
             self._click_box_safe(ocr_results[0], after_sleep=1)
 
-        if not self._wait_and_click_feature('tp', timeout=10, after_sleep=1):
+        if not self._wait_and_click_feature('tp', timeout=5, after_sleep=1):
             self.log_error("南音传送：未找到 tp 图片")
             return False
 
@@ -885,7 +891,7 @@ class WorldBossTask(BaseQRSLTask):
         # ---------- 新增：等待回到主页面 ----------
         self.log_info("南音传送：等待传送后回到主页面...")
         if not self.wait_for_main_page_color(timeout=30):
-            self.log_warning("南音传送：未检测到主页面，但继续尝试下一步")
+            self.log_error("南音传送：未检测到主页面，但继续尝试下一步")
             # 不中断，继续执行
         # ----------------------------------------
 
@@ -1158,6 +1164,39 @@ class WorldBossTask(BaseQRSLTask):
         self._click_safe(x, y, after_sleep=7)
         return True
 
+    # ==================== 传送至格网 ====================
+    def _teleport_to_grid(self):
+        """传送至格网（部分格网Boss专用）"""
+        self.log_info("执行传送至格网")
+
+        self.log_info("按下 Alt + 3")
+        self.send_key_down('alt')
+        self.send_key_down('3')
+        self._sleep_with_check(0.1)
+        self.send_key_up('3')
+        self.send_key_up('alt')
+        self._sleep_with_check(2)
+
+        click_points = [
+            (130, 615, 1),
+            (1030, 725, 1),
+            (1265, 580, 0),
+        ]
+        for x, y, after in click_points:
+            cx, cy = self._get_scaled_coordinates(x, y)
+            self.log_info(f"点击坐标 ({cx}, {cy})")
+            self._click_safe(cx, cy, after_sleep=after)
+
+        self._sleep_with_check(10)
+
+        self.log_info("等待传送后回到主页面...")
+        if not self.wait_for_main_page_color(timeout=30):
+            self.log_error("传送至格网后未回到主页面")
+            return False
+
+        self.log_info("已回到主页面")
+        return True
+
     # ==================== 传送至洛克哈特 ====================
     def _teleport_to_lockhart(self):
         """传送至洛克哈特（启罗/格网Boss专用）"""
@@ -1173,7 +1212,7 @@ class WorldBossTask(BaseQRSLTask):
 
         click_points = [
             (130, 615, 1),
-            (1510, 720, 1),
+            (530, 940, 1),   # 已由 (1510, 720, 1) 修改为 (530, 940, 1)
             (250, 395, 1),
             (1265, 580, 0),
         ]
@@ -1231,6 +1270,13 @@ class WorldBossTask(BaseQRSLTask):
                         self._sleep_with_check(5)
                         continue
                     self.log_info("已回到主页面，继续执行")
+
+                # ========== 传送至格网 ==========
+                if self.config.get('传送至格网', False):
+                    if not self._teleport_to_grid():
+                        self.log_error("传送至格网后未回到主页面，跳过本次循环")
+                        self._sleep_with_check(5)
+                        continue
 
                 # ========== 传送至洛克哈特 ==========
                 if self.config.get('传送至洛克哈特', False):

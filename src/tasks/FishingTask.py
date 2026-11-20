@@ -187,6 +187,7 @@ class FishingTask(BaseQRSLTask):
             self.sleep(0.03)
 
     def run(self):
+        fish_key = 'e'
         try:
             self.log_info("===== 钓鱼任务启动 =====", notify=True)
             fish_key = self.config.get('钓鱼按键', 'e')
@@ -248,7 +249,9 @@ class FishingTask(BaseQRSLTask):
             self.screenshot("fishing_error")
             raise
         finally:
-            self.send_key_up('a')
-            self.send_key_up('d')
-            if fish_key:
-                self.send_key_up(fish_key)
+            # 兜底松开 a/d 和钓鱼键；停止时 send_key_up 本身也可能抛异常，不能让异常盖住退出流程
+            for key_name in ('a', 'd', fish_key):
+                try:
+                    self.send_key_up(key_name)
+                except Exception:
+                    pass

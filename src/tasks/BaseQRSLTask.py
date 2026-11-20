@@ -376,9 +376,15 @@ class BaseQRSLTask(BaseTask):
         return False
 
     def _check_stopped(self):
+        # 兼容旧版/其他分支的停止标记
         if hasattr(self, 'disabled') and self.disabled:
             raise TaskDisabledException("任务已被用户停止")
         if hasattr(self, '_disabled') and self._disabled:
             raise TaskDisabledException("任务已被用户停止")
         if hasattr(self, 'is_disabled') and self.is_disabled():
+            raise TaskDisabledException("任务已被用户停止")
+        # ok 框架真正的停用标记是 _enabled（用户点“停止”时调用 disable() 置为 False）。
+        # 之前这里只检查上面三个不存在的属性，导致 _check_stopped() 是个空函数，
+        # 所有依赖它的循环都不会因停止而中断。
+        if getattr(self, 'enabled', None) is False:
             raise TaskDisabledException("任务已被用户停止")

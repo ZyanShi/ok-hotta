@@ -204,6 +204,9 @@ class JieXianMaoDianTask(BaseQRSLTask):
                 self.log_info("✅ 所有操作完成", notify=True)
                 self.notification("解限锚点任务完成", "已点击确认传送")
 
+            except TaskDisabledException:
+                # 用户点停止时这是正常退出信号，不能被下面的兜底 catch 吞掉并误报“点击操作失败”
+                raise
             except Exception as e:
                 self.log_error(f"点击操作失败: {e}")
                 self.screenshot("click_error")
