@@ -97,10 +97,10 @@ config = {
     'onetime_tasks': [
         ["src.tasks.LianHeZuoZhanTask", "LianHeZuoZhanTask"],
         ["src.tasks.MultiWorldBoss", "MultiWorldBossTask"],
-        ["src.tasks.AutoCombatTask", "AutoCombatTask"],
         ["src.tasks.FishingTask", "FishingTask"],
         ["src.tasks.ZhongFengTuPoTask", "ZhongFengTuPoTask"],
         ["src.tasks.JieXianMaoDianTask", "JieXianMaoDianTask"],
+        ["src.tasks.AutoCombatTask", "AutoCombatTask"],
         ["ok", "DiagnosisTask"],
     ],
     'trigger_tasks': [
