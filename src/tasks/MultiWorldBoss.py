@@ -8,11 +8,21 @@ from src.tasks.BaseQRSLTask import BaseQRSLTask
 class MultiWorldBossTask(BaseQRSLTask):
     """多世界BOSS自动化任务（支持轮换/专注模式）"""
 
+    # BOSS 存活/死亡判定用的颜色与容差（每通道允许 ±BOSS_COLOR_TOLERANCE）
+    BOSS_GREEN_BGR = (161, 209, 47)
+    BOSS_WHITE_BGR = (255, 255, 255)
+    BOSS_COLOR_TOLERANCE = 15
+
+    def _pixel_matches(self, pixel, target, tolerance=None):
+        """像素是否在目标颜色的容差范围内。"""
+        tol = self.BOSS_COLOR_TOLERANCE if tolerance is None else tolerance
+        return all(abs(int(pixel[i]) - target[i]) <= tol for i in range(3))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = "多世界BOSS"
         self.group_name = "精炼强化"
-        self.description = "自动轮换/专注挑战多个世界BOSS并拾取宝箱"
+        self.description = "神临世界BOSS并拾取宝箱"
         self.group_icon = FluentIcon.MARKET
         self.icon = FluentIcon.MARKET
 
@@ -254,7 +264,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return False
 
     def _wait_main_page_and_activate(self):
-        self.log_info("等待返回游戏主页面...")
+        self.log_info("等待返回游戏主页面")
         if not self.wait_for_main_page_color(timeout=60):
             return False
 
@@ -278,7 +288,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info("开启自动战斗")
             self.start_auto_combat()
 
-            self.log_info("首次自动战斗后检测宝箱（持续2秒）...")
+            self.log_info("首次自动战斗后检测宝箱，持续2秒")
             detect_start = time.time()
             while time.time() - detect_start < 2:
                 self._check_stopped()
@@ -299,7 +309,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             return True
 
     def _wait_main_page_vampire(self):
-        self.log_info("吸血鬼：等待返回游戏主页面...")
+        self.log_info("吸血鬼：等待返回游戏主页面")
         if not self.wait_for_main_page_color(timeout=60):
             return False
         return True
@@ -334,27 +344,44 @@ class MultiWorldBossTask(BaseQRSLTask):
             return False
         pixel1 = frame[y1, x1]
         pixel3 = frame[y3, x3]
-        green1 = (pixel1[0] == 161 and pixel1[1] == 209 and pixel1[2] == 47)
-        green3 = (pixel3[0] == 161 and pixel3[1] == 209 and pixel3[2] == 47)
+        green1 = self._pixel_matches(pixel1, self.BOSS_GREEN_BGR)
+        green3 = self._pixel_matches(pixel3, self.BOSS_GREEN_BGR)
         return green1 and green3
 
     def _check_boss_ui_disappeared(self):
+        """判断 BOSS 血条/提示是否消失。
+
+        三个条件同时满足才算消失：
+        - (1295,155) 不是绿色
+        - (1260,155) 不是绿色
+        - (758,975) 不是白色
+        """
         frame = self.next_frame()
         if frame is None:
             return False
         x1, y1 = self._get_scaled_coordinates(1295, 155)
         x3, y3 = self._get_scaled_coordinates(1260, 155)
+        xw, yw = self._get_scaled_coordinates(758, 975)
         h, w = frame.shape[:2]
-        if y1 >= h or x1 >= w or y3 >= h or x3 >= w:
+        if y1 >= h or x1 >= w or y3 >= h or x3 >= w or yw >= h or xw >= w:
             return False
         pixel1 = frame[y1, x1]
         pixel3 = frame[y3, x3]
-        green1 = (pixel1[0] == 161 and pixel1[1] == 209 and pixel1[2] == 47)
-        green3 = (pixel3[0] == 161 and pixel3[1] == 209 and pixel3[2] == 47)
-        return not (green1 or green3)
+        white_pixel = frame[yw, xw]
+        green1 = self._pixel_matches(pixel1, self.BOSS_GREEN_BGR)
+        green3 = self._pixel_matches(pixel3, self.BOSS_GREEN_BGR)
+        white = self._pixel_matches(white_pixel, self.BOSS_WHITE_BGR)
+        disappeared = (not green1) and (not green3) and (not white)
+        if disappeared:
+            self.log_debug(
+                f"BOSS UI 消失特征: 绿点1={tuple(int(v) for v in pixel1)} "
+                f"绿点2={tuple(int(v) for v in pixel3)} "
+                f"白点={tuple(int(v) for v in white_pixel)}"
+            )
+        return disappeared
 
     def _confirm_boss_dead(self):
-        self.log_debug("等待1秒进行二次确认...")
+        self.log_debug("等待1秒再次确认")
         self._sleep_with_check(1)
         return self._check_boss_ui_disappeared()
 
@@ -365,12 +392,12 @@ class MultiWorldBossTask(BaseQRSLTask):
             self._check_stopped()
             if self._check_boss_ui_disappeared():
                 if self._confirm_boss_dead():
-                    self.log_info("首领提示已消失（二次确认通过）")
+                    self.log_info("首领提示已消失，再次确认通过")
                     return True
                 else:
-                    self.log_debug("二次确认未通过，继续等待")
+                    self.log_debug("再次确认未通过，继续等待")
             self._sleep_with_check(0.2)
-        self.log_error(f"等待首领提示消失超时（{timeout}秒）")
+        self.log_error(f"等待首领提示消失超时{timeout}秒")
         return False
 
     # ---------- 战斗线程 ----------
@@ -477,13 +504,8 @@ class MultiWorldBossTask(BaseQRSLTask):
                 return
             center_x, center_y = center
             self.log_info(f"孟章（前台）：屏幕中心坐标 ({center_x}, {center_y})")
-            # 传送/切图后窗口可能没在前台，先单击一次激活窗口并让游戏重新捕获鼠标，
-            # 否则后面的长按左键不生效
-            self.log_debug("孟章（前台）：左键单击一次（初始）")
-            self.mouse_down(center_x, center_y, key='left')
-            time.sleep(0.05)
-            self.mouse_up(key='left')
-            self._wait_event(0.1, *stop_args, generation=generation)
+            # 长按前先点一下，让游戏捕获鼠标，否则长按不生效
+            self._click_to_activate(center_x, center_y)
             while not self._should_stop(*stop_args, generation=generation):
                 skill_key = self._skill_key
                 self.log_info(f"孟章（前台）：按技能键 ({skill_key})，等待1.5秒")
@@ -567,14 +589,14 @@ class MultiWorldBossTask(BaseQRSLTask):
             boss_spawned_occurred = False
             while not self._should_stop(*stop_args, generation=generation):
                 if not boss_spawned_occurred and (time.time() - start_time > timeout):
-                    self.log_info(f"BOSS刷新监测超时（{timeout}秒），未检测到BOSS刷新")
+                    self.log_info(f"BOSS刷新监测超时{timeout}秒，未检测到BOSS刷新")
                     stop_event.set()
                     break
                 if not boss_spawned_occurred:
                     if self._is_boss_spawned():
                         boss_spawned_occurred = True
                         boss_spawned.set()
-                        self.log_info("监测到BOSS刷新！")
+                        self.log_info("监测到BOSS刷新")
                     else:
                         self._wait_event(1, *stop_args, generation=generation)
                         continue
@@ -582,10 +604,10 @@ class MultiWorldBossTask(BaseQRSLTask):
                     if self._check_boss_ui_disappeared():
                         if self._confirm_boss_dead():
                             boss_dead.set()
-                            self.log_info("监测到BOSS死亡（二次确认通过）！")
+                            self.log_info("监测到BOSS死亡，再次确认通过")
                             break
                         else:
-                            self.log_debug("二次确认未通过，继续监控")
+                            self.log_debug("再次确认未通过，继续监控")
                     self._wait_event(1, *stop_args, generation=generation)
         except TaskDisabledException:
             self.log_info("BOSS状态监测线程收到禁用信号，退出")
@@ -595,15 +617,15 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info("BOSS状态监测线程结束")
 
     def _monitor_boss_spawn_only(self, timeout):
-        self.log_info(f"等待BOSS刷新，超时{timeout}秒...")
+        self.log_info(f"等待BOSS刷新，超时{timeout}秒")
         start = time.time()
         while time.time() - start < timeout:
             self._check_stopped()
             if self._is_boss_spawned():
-                self.log_info("检测到BOSS刷新！")
+                self.log_info("检测到BOSS刷新")
                 return 'boss_found'
             self._sleep_with_check(2, interval=0.5)
-        self.log_info(f"BOSS刷新超时（{timeout}秒）")
+        self.log_info(f"BOSS刷新超时{timeout}秒")
         return 'timeout'
 
     # ---------- 宝箱 ----------
@@ -908,7 +930,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         else:
             self._sleep_with_check(8)
 
-        self.log_info("南音传送：等待传送后回到主页面...")
+        self.log_info("南音传送：等待传送后回到主页面")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("南音传送：未检测到主页面，但继续尝试下一步")
 
@@ -939,7 +961,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_error("吸血鬼：南音传送失败")
             return False
 
-        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒，阈值{self.CHEST_THRESHOLD}...")
+        self.log_info(f"吸血鬼：等待宝箱图标出现，超时{timeout}秒，阈值{self.CHEST_THRESHOLD}")
         chest = self.wait_any_chest(time_out=timeout)
         if not chest:
             self.log_error(f"吸血鬼：{timeout}秒内未发现宝箱图标")
@@ -958,7 +980,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         return True
 
     def _dibuling_round(self, wait_timeout):
-        self.log_info(f"地缚灵：原地寻找宝箱，超时{wait_timeout}秒，阈值{self.CHEST_THRESHOLD}...")
+        self.log_info(f"地缚灵：原地寻找宝箱，超时{wait_timeout}秒，阈值{self.CHEST_THRESHOLD}")
         chest = self.wait_any_chest(time_out=wait_timeout)
         if not chest:
             self.log_error(f"地缚灵：{wait_timeout}秒内未发现宝箱")
@@ -1179,7 +1201,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                 self.log_error("多次接近后文字仍未稳定存在，拾取失败")
                 return False
 
-        self.log_info("等待1秒后检测角色状态...")
+        self.log_info("等待1秒后检测角色状态")
         self._sleep_with_check(1)
 
         if self._is_character_state_normal():
@@ -1228,7 +1250,7 @@ class MultiWorldBossTask(BaseQRSLTask):
         x, y = self._get_scaled_coordinates(540, 940)
         self.log_info(f"点击传送坐标 ({x}, {y})")
         self._click_safe(x, y, after_sleep=10)
-        self.log_info("等待传送后回到主页面...")
+        self.log_info("等待传送后回到主页面")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("传送至海嘉德后未回到主页面")
             return False
@@ -1254,7 +1276,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info(f"点击坐标 ({cx}, {cy})")
             self._click_safe(cx, cy, after_sleep=after)
         self._sleep_with_check(10)
-        self.log_info("等待传送后回到主页面...")
+        self.log_info("等待传送后回到主页面")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("传送至九域后未回到主页面")
             return False
@@ -1280,7 +1302,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info(f"点击坐标 ({cx}, {cy})")
             self._click_safe(cx, cy, after_sleep=after)
         self._sleep_with_check(10)
-        self.log_info("等待传送后回到主页面...")
+        self.log_info("等待传送后回到主页面")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("传送至格网后未回到主页面")
             return False
@@ -1307,7 +1329,7 @@ class MultiWorldBossTask(BaseQRSLTask):
             self.log_info(f"点击坐标 ({cx}, {cy})")
             self._click_safe(cx, cy, after_sleep=after)
         self._sleep_with_check(10)
-        self.log_info("等待传送后回到主页面...")
+        self.log_info("等待传送后回到主页面")
         if not self.wait_for_main_page_color(timeout=30):
             self.log_error("传送至洛克哈特后未回到主页面")
             return False
@@ -1441,7 +1463,7 @@ class MultiWorldBossTask(BaseQRSLTask):
                                             daemon=True, name='MWB-combat')
                 self._register_worker_thread(t_combat)
                 t_combat.start()
-                self.log_info("操作线程已启动，等待2秒后启动监控线程...")
+                self.log_info("操作线程已启动，等待2秒后启动监控线程")
                 self._sleep_with_check(2)
 
                 t_monitor = threading.Thread(

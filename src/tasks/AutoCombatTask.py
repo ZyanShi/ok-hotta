@@ -215,7 +215,7 @@ class AutoCombatTask(BaseQRSLTask):
     # ---------- 主循环 ----------
     def run(self):
         try:
-            self.log_info("自动战斗任务启动，延迟2秒...")
+            self.log_info("自动战斗任务启动，延迟2秒")
             self.sleep(2)
 
             weapon_keys = ['武器1', '武器2', '武器3']
@@ -230,9 +230,9 @@ class AutoCombatTask(BaseQRSLTask):
                         if method:
                             method()
                         else:
-                            self.log_error(f"未找到武器 '{weapon_name}' 对应的方法 '{method_name}'")
+                            self.log_error(f"未找到武器 {weapon_name} 对应的方法 {method_name}")
                     else:
-                        self.log_error(f"武器 '{weapon_name}' 未在映射表中定义，跳过")
+                        self.log_error(f"武器 {weapon_name} 未在映射表中定义，跳过")
         except TaskDisabledException:
             self.log_info("任务被禁用，退出")
         except Exception as e:

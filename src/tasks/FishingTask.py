@@ -111,7 +111,7 @@ class FishingTask(BaseQRSLTask):
         return target_x, white_xy
 
     def _wait_fish_hook(self):
-        self.log_info("抛竿完成，等待鱼上钩...")
+        self.log_info("抛竿完成，等待鱼上钩")
         start_time = time.time()
         target_box = self._get_scaled_box(*self.FISH_TARGET_REF)
         while time.time() - start_time < 10:
@@ -189,13 +189,13 @@ class FishingTask(BaseQRSLTask):
     def run(self):
         fish_key = 'e'
         try:
-            self.log_info("===== 钓鱼任务启动 =====", notify=True)
+            self.log_info("钓鱼任务启动", notify=True)
             fish_key = self.config.get('钓鱼按键', 'e')
             max_loops = self.config.get('钓鱼循环次数', 100)
-            self.log_info(f"配置参数: 钓鱼按键={fish_key}, 循环次数={max_loops}")
+            self.log_info(f"配置：钓鱼按键={fish_key}，循环次数={max_loops}")
             completed = 0
             for i in range(max_loops):
-                self.log_info(f"--- 第 {i + 1}/{max_loops} 次循环开始 ---")
+                self.log_info(f"第 {i + 1}/{max_loops} 次循环")
                 if not self._check_fishing_interface():
                     self.sleep(2)
                     continue
@@ -241,7 +241,7 @@ class FishingTask(BaseQRSLTask):
                 self.log_info(f"第 {i + 1} 次钓鱼完成")
                 self.sleep(1)
 
-            self.log_info(f"===== 钓鱼任务结束，共完成 {completed}/{max_loops} 次 =====", notify=True)
+            self.log_info(f"钓鱼任务结束，共完成 {completed}/{max_loops} 次", notify=True)
         except TaskDisabledException:
             self.log_info("钓鱼任务被用户手动停止")
         except Exception as e:

@@ -55,7 +55,7 @@ class JieXianMaoDianTask(BaseQRSLTask):
 
     def run(self):
         try:
-            self.log_info("===== 解限锚点任务启动 =====", notify=True)
+            self.log_info("解限锚点任务启动", notify=True)
 
             # 1. 读取并验证配置
             target_raw = self.config.get('检测文字', '').strip()
@@ -72,8 +72,8 @@ class JieXianMaoDianTask(BaseQRSLTask):
 
             mode = self.config.get('模式选择', '半自动')
             exact_match = self.config.get('完全匹配', True)  # 读取完全匹配开关
-            self.log_info(f"当前模式: {mode}")
-            self.log_info(f"完全匹配模式: {'开启' if exact_match else '关闭'}")
+            self.log_info(f"当前模式：{mode}")
+            self.log_info(f"完全匹配：{'开启' if exact_match else '关闭'}")
 
             # 读取申请入队延迟
             delay_apply = self.config.get('申请入队延迟(ms)', 500) / 1000.0
@@ -109,12 +109,12 @@ class JieXianMaoDianTask(BaseQRSLTask):
                           width=mx2_scaled - mx1_scaled,
                           height=my2_scaled - my1_scaled)
 
-            self.log_info(f"主检测区域: ({x1_scaled},{y1_scaled})-({x2_scaled},{y2_scaled})")
-            self.log_info(f"新消息区域: ({mx1_scaled},{my1_scaled})-({mx2_scaled},{my2_scaled})")
-            self.log_info(f"点击坐标: {click_points}")
+            self.log_info(f"主检测区域：{x1_scaled},{y1_scaled} 到 {x2_scaled},{y2_scaled}")
+            self.log_info(f"新消息区域：{mx1_scaled},{my1_scaled} 到 {mx2_scaled},{my2_scaled}")
+            self.log_info(f"点击坐标：{click_points}")
             if exclude_words:
-                self.log_info(f"排除文字: {exclude_words}")
-            self.log_info(f"申请入队延迟: {delay_apply}s")
+                self.log_info(f"排除文字：{exclude_words}")
+            self.log_info(f"申请入队延迟：{delay_apply}秒")
 
             # 3. 循环检测（主文字 + 新消息）
             last_msg_check = 0
@@ -131,7 +131,7 @@ class JieXianMaoDianTask(BaseQRSLTask):
                             for box in msg_results:
                                 text = box.name
                                 if "新消息" in text:
-                                    self.log_info(f"✅ 检测到新消息: {text}")
+                                    self.log_info(f"检测到新消息：{text}")
                                     self.click_box(box)
                                     self.sleep(0.2)
                                     break
@@ -153,13 +153,13 @@ class JieXianMaoDianTask(BaseQRSLTask):
                                 # 完全匹配：文本必须与关键词完全相同（忽略首尾空格）
                                 if text.strip() == kw.strip():
                                     matched_text = kw
-                                    self.log_info(f"✅ 检测到目标文字（完全匹配）: {text} (关键词: {kw})")
+                                    self.log_info(f"检测到目标文字，完全匹配：{text}，关键词 {kw}")
                                     break
                             else:
                                 # 包含匹配：关键词是文本的子串
                                 if kw in text:
                                     matched_text = kw
-                                    self.log_info(f"✅ 检测到目标文字（包含匹配）: {text} (关键词: {kw})")
+                                    self.log_info(f"检测到目标文字，包含匹配：{text}，关键词 {kw}")
                                     break
 
                         if matched_text:
@@ -175,24 +175,24 @@ class JieXianMaoDianTask(BaseQRSLTask):
             try:
                 # 第一步：玩家头像
                 self.click(*click_points[0])
-                self.log_info(f"✅ 点击玩家头像 {click_points[0]}")
+                self.log_info(f"点击玩家头像 {click_points[0]}")
                 self.sleep(delay_apply)
 
                 # 第二步：申请入队
                 self.click(*click_points[1])
-                self.log_info(f"✅ 点击申请入队 {click_points[1]}")
+                self.log_info(f"点击申请入队 {click_points[1]}")
 
                 # 第三步：等待3秒后点击传送
-                self.log_info("⏳ 等待3秒后点击传送...")
+                self.log_info("等待3秒后点击传送")
                 self.sleep(3)
                 self.click(*click_points[2])
-                self.log_info(f"✅ 点击传送 {click_points[2]}")
+                self.log_info(f"点击传送 {click_points[2]}")
 
                 # 第四步：等待1秒后点击确认
-                self.log_info("⏳ 等待1秒后点击确认...")
+                self.log_info("等待1秒后点击确认")
                 self.sleep(1)
                 self.click(*click_points[3])
-                self.log_info(f"✅ 点击确认传送 {click_points[3]}")
+                self.log_info(f"点击确认传送 {click_points[3]}")
 
                 # 播放声音提示：1000Hz 蜂鸣 0.5秒
                 try:
@@ -201,14 +201,14 @@ class JieXianMaoDianTask(BaseQRSLTask):
                 except Exception as e:
                     self.log_debug(f"播放声音失败: {e}")
 
-                self.log_info("✅ 所有操作完成", notify=True)
+                self.log_info("所有操作完成", notify=True)
                 self.notification("解限锚点任务完成", "已点击确认传送")
 
             except TaskDisabledException:
                 # 用户点停止时这是正常退出信号，不能被下面的兜底 catch 吞掉并误报“点击操作失败”
                 raise
             except Exception as e:
-                self.log_error(f"点击操作失败: {e}")
+                self.log_error(f"点击操作失败：{e}")
                 self.screenshot("click_error")
 
         except TaskDisabledException:

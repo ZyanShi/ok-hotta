@@ -58,7 +58,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             '操作1时间(ms)': '操作1的持续时间（毫秒）',
             '操作2': '操作1之后执行的第二个操作',
             '操作2时间(ms)': '操作2的持续时间（毫秒）',
-            '十字搜索': '宝箱等待超时后、退出副本前，执行一次十字搜索寻找宝箱（单帧检测 chest1~chest5）',
+            '十字搜索': '宝箱等待超时后、退出副本前，执行一次十字搜索寻找宝箱',
             '活力开箱': '关闭自动战斗开箱时开启',
         }
 
@@ -100,7 +100,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 pass
             raise
         except Exception as e:
-            self.log_error(f"释放源器异常: {e}")
+            self.log_error(f"释放源器异常：{e}")
             try:
                 self.send_key_up(source2_key)
             except Exception:
@@ -211,7 +211,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                         if ocr_results:
                             for box in ocr_results:
                                 if '开启' in box.name.strip():
-                                    self.log_info(f"检测到'开启'文字: {box.name.strip()}")
+                                    self.log_info(f"检测到开启文字：{box.name.strip()}")
                                     return True
                     except Exception as e:
                         self.log_debug(f"OCR检测异常: {e}")
@@ -258,12 +258,12 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 if not self._adjust_position(chest_x, chest_y, screen_center_x, width, height):
                     last_key_press_time = current_time
 
-            self.log_error(f"接近宝箱超时（{max_walk_time}s）")
+            self.log_error(f"接近宝箱超时，{max_walk_time}秒")
             return False
         except TaskDisabledException:
             raise
         except Exception as e:
-            self.log_error(f"接近宝箱(OCR)异常: {e}")
+            self.log_error(f"接近宝箱 OCR 异常：{e}")
             return False
 
     # ---------- 孟章（前台）线程 ----------
@@ -281,21 +281,11 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             self.log_error("孟章（前台）：无法获取屏幕帧")
             return
         center_x, center_y = center
-        self.log_info(f"孟章（前台）：线程启动，中心坐标 ({center_x}, {center_y})")
+        self.log_info(f"孟章（前台）：线程启动，中心坐标 {center_x},{center_y}")
 
         try:
-            # 单击左键一次：只做一次，放在循环前面
-            self.log_info("孟章（前台）：单击左键一次")
-            try:
-                self.mouse_down(center_x, center_y, key='left')
-                self.mouse_up(key='left')
-            except Exception:
-                try:
-                    self.mouse_up(key='left')
-                except Exception:
-                    pass
-                raise
-
+            # 长按前先点一下，让游戏捕获鼠标，否则长按不生效
+            self._click_to_activate(center_x, center_y)
             while not stop_event.is_set():
                 skill_key = self._skill_key
                 self.log_info(f"孟章（前台）：按技能键 [{skill_key}]，等待1.5秒")
@@ -373,30 +363,29 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
     # ---------- 孟章：开自动战斗后快速确认宝箱状态 ----------
 
-    def _check_chest_after_auto_combat(self, chest_name, chest_box):
-        """自动战斗开箱是瞬间的，sleep(1) 后快速确认一次。
+    def _check_chest_after_auto_combat(self, chest_name, chest_box, timeout=5.0):
+        """开启自动战斗后确认宝箱状态。
+
+        判定只以 opened chest 图片为准：看到才算已打开；看不到就按“未打开”继续接近。
+        不再用“宝箱图标消失”推断已打开。
         返回 (still_unopened, chest_name, chest_box)
         """
-        if self._is_opened_chest_visible():
-            self.log_info("孟章（前台）：检测到宝箱已打开")
-            return False, chest_name, chest_box
+        start = time.time()
+        while time.time() - start < timeout:
+            self._check_stopped()
+            if self._is_opened_chest_visible():
+                self.log_info("孟章（前台）：检测到 opened chest，宝箱已打开")
+                return False, chest_name, chest_box
 
-        name_now, box_now = self._find_any_chest_once()
-        if name_now is not None:
-            self.log_info(f"孟章（前台）：宝箱 {name_now} 仍在，进入接近流程")
-            return True, name_now, box_now
+            name_now, box_now = self._find_any_chest_once()
+            if name_now is not None and box_now is not None:
+                self.log_info(f"孟章（前台）：宝箱 {name_now} 仍在，继续接近流程")
+                return True, name_now, box_now
 
-        self.sleep(0.5)
-        if self._is_opened_chest_visible():
-            self.log_info("孟章（前台）：宝箱已被自动战斗打开")
-            return False, chest_name, chest_box
-        name_now2, box_now2 = self._find_any_chest_once()
-        if name_now2 is not None:
-            self.log_info(f"孟章（前台）：宝箱 {name_now2} 仍在，进入接近流程")
-            return True, name_now2, box_now2
+            self.sleep(0.3)
 
-        self.log_info("孟章（前台）：宝箱图标持续消失，判定已被自动战斗打开")
-        return False, chest_name, chest_box
+        self.log_info(f"孟章（前台）：{timeout}秒内没看到 opened chest，按未打开处理，继续接近")
+        return True, chest_name, chest_box
 
     # ---------- 十字搜索：寻找宝箱 ----------
 
@@ -405,7 +394,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
         移动序列和多世界BOSS的十字搜索一致；检测只看单帧，不做二次确认。
         """
-        self.log_info("启动十字搜索（检测 chest1~chest5）")
+        self.log_info("启动十字搜索，检测 chest1~chest5")
         found_event = threading.Event()
         stop_event = threading.Event()
         found_chest = [None]
@@ -482,7 +471,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
         if found_event.is_set():
             chest_name, chest_box = found_chest[0]
-            self.log_info(f"十字搜索发现宝箱: {chest_name}")
+            self.log_info(f"十字搜索发现宝箱：{chest_name}")
             return found_chest[0]
         self.log_info("十字搜索结束，未发现宝箱")
         return None
@@ -491,7 +480,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
 
     def run(self):
         try:
-            self.log_info("===== 联合作战任务启动 =====", notify=True)
+            self.log_info("联合作战任务启动", notify=True)
 
             max_loops = self.config.get('循环次数', 10000)
             chest_timeout = self.config.get('宝箱等待超时', 180)
@@ -502,15 +491,15 @@ class LianHeZuoZhanTask(BaseQRSLTask):
             combat_mode = self.config.get('战斗方式', '自动战斗')
             use_vitality = self.config.get('活力开箱', False)
 
-            self.log_info(f"配置: 循环={max_loops}, 战斗方式={combat_mode}, 超时={chest_timeout}s, "
-                          f"操作1={oper1}/{oper1_ms}ms, 操作2={oper2}/{oper2_ms}ms, 活力开箱={use_vitality}, "
+            self.log_info(f"配置：循环={max_loops}，战斗方式={combat_mode}，超时={chest_timeout}秒，"
+                          f"操作1={oper1}/{oper1_ms}ms，操作2={oper2}/{oper2_ms}ms，活力开箱={use_vitality}，"
                           f"宝箱阈值={self.CHEST_THRESHOLD}")
 
             loop_count = 0
 
             while loop_count < max_loops:
                 loop_count += 1
-                self.log_info(f"--- 第 {loop_count}/{max_loops} 次循环 ---")
+                self.log_info(f"第 {loop_count}/{max_loops} 次循环")
 
                 if not self.is_main_page():
                     self.log_error("无法进入游戏主页面，跳过本次循环")
@@ -546,7 +535,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     self.log_error(f"未知战斗方式: {combat_mode}")
 
                 # 等待宝箱
-                self.log_info(f"等待宝箱出现（超时{chest_timeout}s）...")
+                self.log_info(f"等待宝箱出现，超时{chest_timeout}秒")
                 start_time = time.time()
                 found_opened_chest = False
                 found_unopened_chest = False
@@ -592,7 +581,7 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                         if box is not None:
                             chest_name = name
                             chest_box = box
-                            self.log_info(f"检测到未打开的宝箱: {name}")
+                            self.log_info(f"检测到未打开的宝箱：{name}")
                             found_unopened_chest = True
                             break
 
@@ -616,24 +605,24 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                         still_unopened, chest_name, chest_box = self._check_chest_after_auto_combat(
                             chest_name, chest_box
                         )
-                        if still_unopened and chest_box is not None:
+                        if still_unopened:
                             found_unopened_chest = True
                             found_opened_chest = False
-                            self.log_info(f"孟章（前台）：宝箱 {chest_name} 仍存在，继续接近流程")
+                            self.log_info(f"孟章（前台）：宝箱 {chest_name} 仍未打开，继续接近流程")
                         else:
                             found_unopened_chest = False
                             found_opened_chest = True
-                            self.log_info("孟章（前台）：宝箱已被自动战斗打开，跳过接近流程")
+                            self.log_info("孟章（前台）：确认宝箱已打开，跳过接近流程")
 
                 # 开箱
                 if found_opened_chest:
                     self.log_info("宝箱已打开，直接退出副本")
                 elif found_unopened_chest and chest_box:
-                    self.log_info(f"尝试接近并打开宝箱({chest_name})")
+                    self.log_info(f"尝试接近并打开宝箱 {chest_name}")
                     remaining_time = chest_timeout - (time.time() - start_time)
 
                     if use_vitality:
-                        self.log_info("活力开箱模式（OCR检测'开启'）")
+                        self.log_info("活力开箱模式，OCR 检测开启")
                         success = self._approach_chest_with_ocr(max_walk_time=remaining_time)
                         if success:
                             self.send_key_safe('f', down_time=0.1)
@@ -674,11 +663,11 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                     else:
                         self.log_info("未开启十字搜索，退出副本重试")
 
-                self.log_info("退出副本...")
+                self.log_info("退出副本")
                 self.exit_dungeon()
                 self.log_info(f"第 {loop_count} 次循环完成")
 
-            self.log_info(f"===== 联合作战任务结束，共完成 {loop_count} 次循环 =====", notify=True)
+            self.log_info(f"联合作战任务结束，共完成 {loop_count} 次循环", notify=True)
 
         except TaskDisabledException:
             self.log_info("联合作战任务被用户手动停止")

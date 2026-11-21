@@ -48,6 +48,25 @@ class BaseQRSLTask(BaseTask):
 
     # ---------- 通用小工具（原先散落在各任务里，合并到基类） ----------
 
+    def _click_to_activate(self, x, y, wait=0.1):
+        """长按/滑动之前先点一下画面中心。
+
+        幻塔需要一次真实鼠标点击才会捕获指针，否则后面的长按不生效。
+        所以每次长按前都要点，不能只在任务开始时点一次。
+        """
+        self.log_info("单击屏幕中心激活窗口")
+        try:
+            self.mouse_down(x, y, key='left')
+            self.mouse_up(key='left')
+        except Exception:
+            try:
+                self.mouse_up(key='left')
+            except Exception:
+                pass
+            raise
+        if wait > 0:
+            time.sleep(wait)
+
     def _get_screen_center(self):
         """获取画面中心坐标，优先用缓存帧，不主动截图。
 
@@ -117,7 +136,7 @@ class BaseQRSLTask(BaseTask):
             if after_sleep > 0:
                 self._sleep_with_check(after_sleep)
             return True
-        self.log_error(f"等待 [{feature_name}] 超时 ({timeout}秒)")
+        self.log_error(f"等待 [{feature_name}] 超时{timeout}秒")
         if raise_if_not_found:
             raise Exception(f"找不到特征 {feature_name}")
         return False
@@ -180,7 +199,7 @@ class BaseQRSLTask(BaseTask):
         return self._color_similar(pixel_color, self.TARGET_CHECK_COLOR, tolerance=10)
 
     def wait_for_exit_button_white(self, timeout=60):
-        self.log_info(f"等待进入副本，超时{timeout}秒...")
+        self.log_info(f"等待进入副本，超时{timeout}秒")
         start_time = time.time()
         while time.time() - start_time < timeout:
             self._check_stopped()
@@ -192,7 +211,7 @@ class BaseQRSLTask(BaseTask):
         return False
 
     def wait_for_target_color(self, timeout):
-        self.log_info(f"等待目标颜色出现，超时{timeout}秒...")
+        self.log_info(f"等待目标颜色出现，超时{timeout}秒")
         start_time = time.time()
         while time.time() - start_time < timeout:
             self._check_stopped()
@@ -226,16 +245,16 @@ class BaseQRSLTask(BaseTask):
         return success
 
     def enter_dungeon(self):
-        self.log_info("开始进入副本流程...")
+        self.log_info("开始进入副本流程")
         success, attend_box = self.enter_team(alt_down_delay=0.8, click_delay=1)
         if not success or not attend_box:
             self.log_error("进入队伍失败，无法继续进入副本")
             return False
-        self.log_info("点击'参加'按钮")
+        self.log_info("点击参加按钮")
         self._click_box_safe(attend_box, after_sleep=1)
         enter_box = self.wait_feature('enter', time_out=10, threshold=0.75)
         if not enter_box:
-            self.log_error("未找到'进入'按钮")
+            self.log_error("未找到进入按钮")
             return False
         self._click_box_safe(enter_box, after_sleep=0.5)
         return self.wait_for_exit_button_white(timeout=60)
@@ -430,7 +449,7 @@ class BaseQRSLTask(BaseTask):
         self._send_key_safe(key, down_time)
 
     def wait_for_main_page_color(self, timeout=60):
-        self.log_info(f"等待主页颜色出现，超时{timeout}秒...")
+        self.log_info(f"等待主页颜色出现，超时{timeout}秒")
         start_time = time.time()
         while time.time() - start_time < timeout:
             self._check_stopped()

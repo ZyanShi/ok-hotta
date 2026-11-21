@@ -40,19 +40,19 @@ class ZhongFengTuPoTask(BaseQRSLTask):
                         self.sleep(after_sleep)
                     return box, name
             self.sleep(0.5)
-        self.log_error(f"等待特征 {feature_names} 超时 ({timeout}秒)")
+        self.log_error(f"等待特征 {feature_names} 超时{timeout}秒")
         return None, None
 
     def run(self):
         """任务主循环"""
         try:
-            self.log_info("===== 众峰突破任务启动 =====", notify=True)
+            self.log_info("众峰突破任务启动", notify=True)
             max_loops = self.config.get('循环次数', 10000)
             loop_count = 0
 
             while loop_count < max_loops:
                 loop_count += 1
-                self.log_info(f"--- 第 {loop_count}/{max_loops} 次循环开始 ---")
+                self.log_info(f"第 {loop_count}/{max_loops} 次循环")
 
                 if not self.is_main_page():
                     self.log_error("无法进入游戏主页面，跳过本次循环")
@@ -66,7 +66,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
                 # 修改点：等待 guild1 或 guild2 出现并点击
                 box, name = self._wait_for_any_feature(['guild1', 'guild2'], timeout=5, after_sleep=0)
                 if box is None:
-                    self.log_error("未找到工会图标（guild1/guild2），跳过本次循环")
+                    self.log_error("未找到工会图标 guild1/guild2，跳过本次循环")
                     self.sleep(5)
                     continue
                 self.log_info(f"找到并点击工会图标 [{name}]")
@@ -111,7 +111,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
                     self.sleep(5)
                     continue
 
-                self.log_info("等待退出按钮变白...")
+                self.log_info("等待退出按钮变白")
                 if not self.wait_for_exit_button_white(timeout=60):
                     self.log_error("等待退出按钮变白超时，跳过本次循环")
                     self.sleep(5)
@@ -127,7 +127,7 @@ class ZhongFengTuPoTask(BaseQRSLTask):
 
                 self.log_info(f"第 {loop_count} 次循环完成")
 
-            self.log_info(f"===== 众峰突破任务结束，共完成 {loop_count} 次循环 =====", notify=True)
+            self.log_info(f"众峰突破任务结束，共完成 {loop_count} 次循环", notify=True)
 
         except TaskDisabledException:
             self.log_info("众峰突破任务被用户手动停止")
