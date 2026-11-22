@@ -191,6 +191,12 @@
             "height": 1080,
             "id": 31,
             "file_name": "images/31.png"
+        },
+        {
+            "width": 1920,
+            "height": 1080,
+            "id": 32,
+            "file_name": "images/32.png"
         }
     ],
     "categories": [
@@ -360,34 +366,38 @@
         },
         {
             "id": 41,
-            "name": "shenlin"
+            "name": "respawn"
         },
         {
             "id": 42,
-            "name": "sure"
+            "name": "shenlin"
         },
         {
             "id": 43,
-            "name": "taotie"
+            "name": "sure"
         },
         {
             "id": 44,
-            "name": "tp"
+            "name": "taotie"
         },
         {
             "id": 45,
-            "name": "unopened chest"
+            "name": "tp"
         },
         {
             "id": 46,
-            "name": "yingzhao"
+            "name": "unopened chest"
         },
         {
             "id": 47,
-            "name": "zaiewuhao"
+            "name": "yingzhao"
         },
         {
             "id": 48,
+            "name": "zaiewuhao"
+        },
+        {
+            "id": 49,
             "name": "zhongfengtupo"
         }
     ],
@@ -440,7 +450,7 @@
         {
             "id": 3,
             "image_id": 2,
-            "category_id": 45,
+            "category_id": 46,
             "segmentation": [],
             "bbox": [
                 1701.3424298415246,
@@ -590,7 +600,7 @@
         {
             "id": 13,
             "image_id": 11,
-            "category_id": 41,
+            "category_id": 42,
             "segmentation": [],
             "bbox": [
                 1686.0301507537683,
@@ -665,7 +675,7 @@
         {
             "id": 18,
             "image_id": 16,
-            "category_id": 48,
+            "category_id": 49,
             "segmentation": [],
             "bbox": [
                 387.13567839195974,
@@ -710,7 +720,7 @@
         {
             "id": 21,
             "image_id": 19,
-            "category_id": 42,
+            "category_id": 43,
             "segmentation": [],
             "bbox": [
                 1177.6884422110552,
@@ -830,7 +840,7 @@
         {
             "id": 29,
             "image_id": 22,
-            "category_id": 46,
+            "category_id": 47,
             "segmentation": [],
             "bbox": [
                 799.5415472779367,
@@ -908,14 +918,14 @@
             "category_id": 17,
             "segmentation": [],
             "bbox": [
-                415.2590082023846,
-                356.21399005406965,
-                20.089463170896284,
-                25.18678964709378
+                407.92376464937604,
+                354.3801791658177,
+                31.092328500409348,
+                32.52203320010247
             ],
             "ignore": 0,
             "iscrowd": 0,
-            "area": 505.9890830084023
+            "area": 1011.1857397588051
         },
         {
             "id": 35,
@@ -935,7 +945,7 @@
         {
             "id": 36,
             "image_id": 27,
-            "category_id": 44,
+            "category_id": 45,
             "segmentation": [],
             "bbox": [
                 1588.0802292263609,
@@ -965,7 +975,7 @@
         {
             "id": 38,
             "image_id": 28,
-            "category_id": 47,
+            "category_id": 48,
             "segmentation": [],
             "bbox": [
                 1307.5071633237822,
@@ -1040,7 +1050,7 @@
         {
             "id": 43,
             "image_id": 29,
-            "category_id": 43,
+            "category_id": 44,
             "segmentation": [],
             "bbox": [
                 729.8567335243554,
@@ -1111,6 +1121,21 @@
             "ignore": 0,
             "iscrowd": 0,
             "area": 480.8893194637166
+        },
+        {
+            "id": 48,
+            "image_id": 32,
+            "category_id": 41,
+            "segmentation": [],
+            "bbox": [
+                1710.9455587392551,
+                871.0601719197708,
+                86.1891117478508,
+                67.85100286532953
+            ],
+            "ignore": 0,
+            "iscrowd": 0,
+            "area": 5848.017668163632
         }
     ],
     "info": {
@@ -1119,6 +1144,6 @@
         "description": "",
         "contributor": "Label Studio",
         "url": "",
-        "date_created": "2026-10-26 18:43:35.653199"
+        "date_created": "2026-11-23 00:29:58.214038"
     }
 }
