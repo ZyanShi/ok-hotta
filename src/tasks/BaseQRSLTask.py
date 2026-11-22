@@ -303,6 +303,17 @@ class BaseQRSLTask(BaseTask):
                 self._click_box_safe(cancel_box, after_sleep=2)
                 self.next_frame()
                 continue
+            # 复活按钮：识别到就点它，然后继续确认主页面
+            # 图片资源还没加时 find_one 可能找不到，这里容错跳过
+            try:
+                respawn_box = self.find_one('respawn', threshold=0.75)
+            except Exception:
+                respawn_box = None
+            if respawn_box:
+                self.log_info("检测到 respawn，点击复活")
+                self._click_box_safe(respawn_box, after_sleep=2)
+                self.next_frame()
+                continue
             check_x, check_y = self._get_scaled_coordinates(*self.EXIT_CHECK_COORDS)
             pixel_color = frame[check_y, check_x]
             if self._is_white_color(pixel_color):
@@ -376,6 +387,10 @@ class BaseQRSLTask(BaseTask):
                             return False
                 else:
                     chest_disappear_count = 0
+                if current_chest is None:
+                    # 这一帧没看到宝箱：先等待，连续 5 帧看不到才重新获取
+                    self.sleep(0.1)
+                    continue
                 target_chest = current_chest
                 chest_x, chest_y = target_chest.center()
                 if not self._adjust_position(chest_x, chest_y, screen_center_x, width, height):
