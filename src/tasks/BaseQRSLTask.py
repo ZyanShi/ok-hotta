@@ -321,6 +321,16 @@ class BaseQRSLTask(BaseTask):
                 self.sleep(10)
                 self.next_frame()
                 continue
+            # 登录按钮：先于 ESC 检测，避免 ESC 把登录界面关掉
+            try:
+                login_box = self.find_one('login', threshold=0.75)
+            except Exception:
+                login_box = None
+            if login_box:
+                self.log_info("检测到 login，点击登录")
+                self._click_box_safe(login_box, after_sleep=2)
+                self.next_frame()
+                continue
             self.back(after_sleep=2)
             self.next_frame()
         return False
