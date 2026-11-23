@@ -197,6 +197,12 @@
             "height": 1080,
             "id": 32,
             "file_name": "images/32.png"
+        },
+        {
+            "width": 1920,
+            "height": 1080,
+            "id": 33,
+            "file_name": "images/33.png"
         }
     ],
     "categories": [
@@ -342,62 +348,66 @@
         },
         {
             "id": 35,
-            "name": "magema"
+            "name": "login"
         },
         {
             "id": 36,
-            "name": "mainpage"
+            "name": "magema"
         },
         {
             "id": 37,
-            "name": "nanyintp"
+            "name": "mainpage"
         },
         {
             "id": 38,
-            "name": "openchest1"
+            "name": "nanyintp"
         },
         {
             "id": 39,
-            "name": "openchest2"
+            "name": "openchest1"
         },
         {
             "id": 40,
-            "name": "opened chest"
+            "name": "openchest2"
         },
         {
             "id": 41,
-            "name": "respawn"
+            "name": "opened chest"
         },
         {
             "id": 42,
-            "name": "shenlin"
+            "name": "respawn"
         },
         {
             "id": 43,
-            "name": "sure"
+            "name": "shenlin"
         },
         {
             "id": 44,
-            "name": "taotie"
+            "name": "sure"
         },
         {
             "id": 45,
-            "name": "tp"
+            "name": "taotie"
         },
         {
             "id": 46,
-            "name": "unopened chest"
+            "name": "tp"
         },
         {
             "id": 47,
-            "name": "yingzhao"
+            "name": "unopened chest"
         },
         {
             "id": 48,
-            "name": "zaiewuhao"
+            "name": "yingzhao"
         },
         {
             "id": 49,
+            "name": "zaiewuhao"
+        },
+        {
+            "id": 50,
             "name": "zhongfengtupo"
         }
     ],
@@ -450,7 +460,7 @@
         {
             "id": 3,
             "image_id": 2,
-            "category_id": 46,
+            "category_id": 47,
             "segmentation": [],
             "bbox": [
                 1701.3424298415246,
@@ -480,7 +490,7 @@
         {
             "id": 5,
             "image_id": 4,
-            "category_id": 40,
+            "category_id": 41,
             "segmentation": [],
             "bbox": [
                 1701.102272262532,
@@ -600,7 +610,7 @@
         {
             "id": 13,
             "image_id": 11,
-            "category_id": 42,
+            "category_id": 43,
             "segmentation": [],
             "bbox": [
                 1686.0301507537683,
@@ -615,7 +625,7 @@
         {
             "id": 14,
             "image_id": 12,
-            "category_id": 38,
+            "category_id": 39,
             "segmentation": [],
             "bbox": [
                 1615.4773869346734,
@@ -630,7 +640,7 @@
         {
             "id": 15,
             "image_id": 13,
-            "category_id": 39,
+            "category_id": 40,
             "segmentation": [],
             "bbox": [
                 1640.8040201005026,
@@ -675,7 +685,7 @@
         {
             "id": 18,
             "image_id": 16,
-            "category_id": 49,
+            "category_id": 50,
             "segmentation": [],
             "bbox": [
                 387.13567839195974,
@@ -720,7 +730,7 @@
         {
             "id": 21,
             "image_id": 19,
-            "category_id": 43,
+            "category_id": 44,
             "segmentation": [],
             "bbox": [
                 1177.6884422110552,
@@ -840,7 +850,7 @@
         {
             "id": 29,
             "image_id": 22,
-            "category_id": 47,
+            "category_id": 48,
             "segmentation": [],
             "bbox": [
                 799.5415472779367,
@@ -930,7 +940,7 @@
         {
             "id": 35,
             "image_id": 26,
-            "category_id": 37,
+            "category_id": 38,
             "segmentation": [],
             "bbox": [
                 903.9334375987222,
@@ -945,7 +955,7 @@
         {
             "id": 36,
             "image_id": 27,
-            "category_id": 45,
+            "category_id": 46,
             "segmentation": [],
             "bbox": [
                 1588.0802292263609,
@@ -975,7 +985,7 @@
         {
             "id": 38,
             "image_id": 28,
-            "category_id": 48,
+            "category_id": 49,
             "segmentation": [],
             "bbox": [
                 1307.5071633237822,
@@ -1050,7 +1060,7 @@
         {
             "id": 43,
             "image_id": 29,
-            "category_id": 44,
+            "category_id": 45,
             "segmentation": [],
             "bbox": [
                 729.8567335243554,
@@ -1095,7 +1105,7 @@
         {
             "id": 46,
             "image_id": 30,
-            "category_id": 35,
+            "category_id": 36,
             "segmentation": [],
             "bbox": [
                 172.378223495702,
@@ -1125,7 +1135,7 @@
         {
             "id": 48,
             "image_id": 32,
-            "category_id": 41,
+            "category_id": 42,
             "segmentation": [],
             "bbox": [
                 1710.9455587392551,
@@ -1136,6 +1146,21 @@
             "ignore": 0,
             "iscrowd": 0,
             "area": 5848.017668163632
+        },
+        {
+            "id": 49,
+            "image_id": 33,
+            "category_id": 35,
+            "segmentation": [],
+            "bbox": [
+                893.0659025787967,
+                935.2435530085959,
+                135.70200573065907,
+                53.18051575931239
+            ],
+            "ignore": 0,
+            "iscrowd": 0,
+            "area": 7216.702654329615
         }
     ],
     "info": {
@@ -1144,6 +1169,6 @@
         "description": "",
         "contributor": "Label Studio",
         "url": "",
-        "date_created": "2026-11-23 00:29:58.214038"
+        "date_created": "2026-11-23 09:59:15.702381"
     }
 }
