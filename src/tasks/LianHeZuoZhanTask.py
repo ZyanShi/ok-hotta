@@ -253,6 +253,10 @@ class LianHeZuoZhanTask(BaseQRSLTask):
                 else:
                     chest_disappear_count = 0
 
+                if current_chest is None:
+                    # 这一帧没看到宝箱：先等待，连续 5 帧看不到才重新获取
+                    self.sleep(0.1)
+                    continue
                 target_chest = current_chest
                 chest_x, chest_y = target_chest.center()
                 if not self._adjust_position(chest_x, chest_y, screen_center_x, width, height):
